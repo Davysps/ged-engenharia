@@ -1,0 +1,112 @@
+// Prisma schema for GED Engenharia
+// https://www.prisma.io/docs/concepts/components/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ENGENHEIRO
+  COORDENADOR
+  ADMIN
+}
+
+enum RevisionStatus {
+  EM_ELABORACAO
+  EM_REVISAO
+  APROVADO
+  OBSOLETO
+}
+
+enum Discipline {
+  ELETRICA
+  HIDRAULICA
+  ESTRUTURAL
+  MECANICA
+  CIVIL
+  OUTRO
+}
+
+enum AuditEntityType {
+  USER
+  PROJECT
+  DOCUMENT
+  REVISION
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  LOGIN
+  LOGOUT
+}
+
+model User {
+  id                Int          @id @default(autoincrement())
+  nome              String
+  email             String       @unique
+  senhaHash         String       @map("senha_hash")
+  role              UserRole     @default(ENGENHEIRO)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  documents         Document[]   @relation("UserCreatedDocuments")
+  approvedRevisions Revision[]   @relation("UserApprovedRevisions")
+  auditTrails       AuditTrail[]
+}
+
+model Project {
+  id        Int        @id @default(autoincrement())
+  codigo    String     @unique
+  nome      String
+  descricao String?
+  cliente   String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  documents Document[]
+}
+
+model Document {
+  id              Int        @id @default(autoincrement())
+  project         Project    @relation(fields: [projectId], references: [id])
+  projectId       Int
+  codigoDocumento String     @map("codigo_documento")
+  titulo          String
+  disciplina      Discipline
+  metadata        Json?
+  createdBy       User       @relation("UserCreatedDocuments", fields: [createdById], references: [id])
+  createdById     Int
+  createdAt       DateTime   @default(now())
+  revisions       Revision[]
+}
+
+model Revision {
+  id           Int            @id @default(autoincrement())
+  document     Document       @relation(fields: [documentId], references: [id])
+  documentId   Int
+  versionLabel String
+  filePath     String
+  fileHash     String
+  status       RevisionStatus @default(EM_ELABORACAO)
+  approvedBy   User?          @relation("UserApprovedRevisions", fields: [approvedById], references: [id])
+  approvedById Int?
+  approvedAt   DateTime?
+  createdAt    DateTime       @default(now())
+}
+
+model AuditTrail {
+  id            Int             @id @default(autoincrement())
+  entityType    AuditEntityType
+  entityId      String
+  action        AuditAction
+  performedBy   User            @relation(fields: [performedById], references: [id])
+  performedById Int
+  performedAt   DateTime        @default(now())
+  details       Json?
+}
