@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Teste de Upload - GED Engenharia</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 500px; background-color: #f4f4f9;}
+        label { font-weight: bold; margin-top: 10px; display: block; }
+        input, select { width: 100%; padding: 8px; margin-top: 5px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px;}
+        button { background-color: #0056b3; color: white; padding: 12px 15px; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-size: 16px; font-weight: bold;}
+        button:hover { background-color: #004494; }
+    </style>
+</head>
+<body>
+    <h2>Submeter Documento Técnico (R0)</h2>
+    <form action="http://localhost:3000/documents/upload" method="POST" enctype="multipart/form-data">
+        <label>ID do Projeto (Criado no Seed):</label>
+        <input type="number" name="projectId" value="1" required>
+
+        <label>Código do Documento:</label>
+        <input type="text" name="codigoDocumento" value="ENG-MEC-001" required>
+
+        <label>Título:</label>
+        <input type="text" name="titulo" value="Fluxograma de Processo - Caldeira" required>
+
+        <label>Disciplina:</label>
+        <select name="disciplina" required>
+            <option value="MECANICA">Mecânica</option>
+            <option value="CIVIL">Civil</option>
+            <option value="ELETRICA">Elétrica</option>
+            <option value="ESTRUTURAL">Estrutural</option>
+        </select>
+
+        <label>ID do Engenheiro (Criado no Seed):</label>
+        <input type="number" name="createdById" value="1" required>
+
+        <label>Ficheiro (PDF ou DWG):</label>
+        <input type="file" name="file" required>
+
+        <button type="submit">Fazer Upload e Gerar Revisão</button>
+    </form>
+</body>
+</html>

@@ -94,3 +94,19 @@ Referências rápidas
 
 ---
 Versão do documento: 2026-06-09 — autor: time de arquitetura
+
+Progresso Atual (Status - Fim do Dia 1)
+---------------------------------------
+- **Banco de Dados:** Neon DB (PostgreSQL) conectado com sucesso via Prisma 7.
+- **Arquitetura Prisma:** Implementado padrão Singleton (`src/prisma.ts`) com o adaptador `@prisma/adapter-pg` para suportar Serverless e evitar estouro de conexões (Pooler).
+- **TypeScript:** Configuração ajustada para o padrão Node moderno (`moduleResolution: node16`, `exactOptionalPropertyTypes: true`).
+- **Seed:** Script de seed configurado no `prisma.config.ts` (`npx prisma db seed`), criando o Projeto MVP e o Usuário Admin iniciais.
+- **Upload (MVP):** Middleware `multer` configurado para salvar arquivos localmente na pasta `/uploads`.
+- **Core Feature:** Endpoint `POST /documents/upload` testado e validado. Ele cria, em uma única transação, o metadado na tabela `Document` e o arquivo físico/histórico na tabela `Revision`.
+
+Próxima Etapa (Próxima Sessão)
+------------------------------
+1. Refinar a arquitetura de armazenamento: preparar a transição dos uploads do disco local (Multer) para um serviço de nuvem (como AWS S3 ou Google Cloud Storage).
+2. Começar a estruturar os endpoints de listagem de documentos por projeto e controle de versão (emissão de Revisão 1, 2, etc.).
+
+Versão do documento: 2026-06-23 — autor: Dev. Davy
