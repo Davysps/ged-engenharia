@@ -2,23 +2,32 @@
 // https://www.prisma.io/docs/concepts/components/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-enum UserRole {
-  ENGENHEIRO
-  COORDENADOR
-  ADMIN
+// --- ENUMS ---
+enum GlobalRole {
+  SYSADMIN      // Dono do SaaS (nós)
+  USER          // Usuário comum logado
+}
+
+enum ContractRole {
+  GESTOR        // Pode criar/editar documentos e convidar pessoas
+  ENGENHEIRO    // Pode submeter novas revisões (R0, R1)
+  APROVADOR     // Pode aprovar/rejeitar revisões
+  LEITOR        // Só pode visualizar/baixar
 }
 
 enum RevisionStatus {
   EM_ELABORACAO
   EM_REVISAO
   APROVADO
+  REJEITADO
   OBSOLETO
 }
 
@@ -28,85 +37,87 @@ enum Discipline {
   ESTRUTURAL
   MECANICA
   CIVIL
+  ARQUITETURA
   OUTRO
 }
 
-enum AuditEntityType {
-  USER
-  PROJECT
-  DOCUMENT
-  REVISION
+// --- MODELS ---
+
+model Client {
+  id        Int        @id @default(autoincrement())
+  nome      String
+  cnpj      String?    @unique
+  contracts Contract[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 }
 
-enum AuditAction {
-  CREATE
-  UPDATE
-  DELETE
-  APPROVE
-  REJECT
-  LOGIN
-  LOGOUT
+model Contract {
+  id          Int                  @id @default(autoincrement())
+  client      Client               @relation(fields: [clientId], references: [id])
+  clientId    Int
+  codigo      String               @unique
+  nome        String
+  descricao   String?
+  memberships ContractMembership[]
+  documents   Document[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 }
 
 model User {
-  id                Int          @id @default(autoincrement())
+  id                Int                  @id @default(autoincrement())
   nome              String
-  email             String       @unique
-  senhaHash         String       @map("senha_hash")
-  role              UserRole     @default(ENGENHEIRO)
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
-  documents         Document[]   @relation("UserCreatedDocuments")
-  approvedRevisions Revision[]   @relation("UserApprovedRevisions")
-  auditTrails       AuditTrail[]
+  email             String               @unique
+  senhaHash         String               @map("senha_hash")
+  globalRole        GlobalRole           @default(USER)
+  contracts         ContractMembership[] // Contratos que este usuário tem acesso
+  documentsCreated  Document[]           @relation("UserCreatedDocuments")
+  approvedRevisions Revision[]           @relation("UserApprovedRevisions")
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
 }
 
-model Project {
-  id        Int        @id @default(autoincrement())
-  codigo    String     @unique
-  nome      String
-  descricao String?
-  cliente   String?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  documents Document[]
+// Tabela pivô de Controle de Acesso (RBAC) Granular
+model ContractMembership {
+  id         Int          @id @default(autoincrement())
+  user       User         @relation(fields: [userId], references: [id])
+  userId     Int
+  contract   Contract     @relation(fields: [contractId], references: [id])
+  contractId Int
+  role       ContractRole @default(LEITOR)
+  createdAt  DateTime     @default(now())
+
+  @@unique([userId, contractId]) // Um usuário só tem uma role (permissão) por contrato
 }
 
 model Document {
   id              Int        @id @default(autoincrement())
-  project         Project    @relation(fields: [projectId], references: [id])
-  projectId       Int
+  contract        Contract   @relation(fields: [contractId], references: [id])
+  contractId      Int
   codigoDocumento String     @map("codigo_documento")
   titulo          String
   disciplina      Discipline
-  metadata        Json?
+  metadata        Json?      // Para futuros dados extraídos via IA
   createdBy       User       @relation("UserCreatedDocuments", fields: [createdById], references: [id])
   createdById     Int
   createdAt       DateTime   @default(now())
   revisions       Revision[]
+
+  @@unique([contractId, codigoDocumento]) // Não pode haver códigos duplicados no mesmo contrato
 }
 
 model Revision {
   id           Int            @id @default(autoincrement())
-  document     Document       @relation(fields: [documentId], references: [id])
+  document     Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
   documentId   Int
-  versionLabel String
+  versionLabel String         // Ex: R0, R1, A, B
   filePath     String
   fileHash     String
   status       RevisionStatus @default(EM_ELABORACAO)
   approvedBy   User?          @relation("UserApprovedRevisions", fields: [approvedById], references: [id])
   approvedById Int?
   approvedAt   DateTime?
+  comments     Json?          // Para futuro Markup/Redlining
   createdAt    DateTime       @default(now())
-}
-
-model AuditTrail {
-  id            Int             @id @default(autoincrement())
-  entityType    AuditEntityType
-  entityId      String
-  action        AuditAction
-  performedBy   User            @relation(fields: [performedById], references: [id])
-  performedById Int
-  performedAt   DateTime        @default(now())
-  details       Json?
 }

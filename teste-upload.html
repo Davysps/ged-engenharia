@@ -2,42 +2,93 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Teste de Upload - GED Engenharia</title>
+    <title>Teste Nuvem - GED Engenharia</title>
     <style>
         body { font-family: Arial, sans-serif; padding: 20px; max-width: 500px; background-color: #f4f4f9;}
         label { font-weight: bold; margin-top: 10px; display: block; }
         input, select { width: 100%; padding: 8px; margin-top: 5px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px;}
-        button { background-color: #0056b3; color: white; padding: 12px 15px; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-size: 16px; font-weight: bold;}
-        button:hover { background-color: #004494; }
+        button { background-color: #ff9900; color: white; padding: 12px 15px; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-size: 16px; font-weight: bold;}
+        button:hover { background-color: #cc7a00; }
+        #resultado { margin-top: 20px; padding: 10px; border-radius: 4px; display: none; word-wrap: break-word; }
     </style>
 </head>
 <body>
-    <h2>Submeter Documento Técnico (R0)</h2>
-    <form action="http://localhost:3000/documents/upload" method="POST" enctype="multipart/form-data">
-        <label>ID do Projeto (Criado no Seed):</label>
-        <input type="number" name="projectId" value="1" required>
+    <h2>Submeter PDF/DWG para a AWS S3</h2>
+    <form id="uploadForm">
+        <label>Seu Token JWT (Cole aqui sem a palavra Bearer):</label>
+        <input type="text" id="token" placeholder="eyJh..." required>
+
+        <label>ID do Contrato (Criado no Seed):</label>
+        <input type="number" id="contractId" value="1" required>
 
         <label>Código do Documento:</label>
-        <input type="text" name="codigoDocumento" value="ENG-MEC-001" required>
+        <input type="text" id="codigoDocumento" value="ENG-MEC-NUVEM-002" required>
 
         <label>Título:</label>
-        <input type="text" name="titulo" value="Fluxograma de Processo - Caldeira" required>
+        <input type="text" id="titulo" value="Teste de Upload na Nuvem AWS" required>
 
         <label>Disciplina:</label>
-        <select name="disciplina" required>
+        <select id="disciplina" required>
             <option value="MECANICA">Mecânica</option>
             <option value="CIVIL">Civil</option>
             <option value="ELETRICA">Elétrica</option>
-            <option value="ESTRUTURAL">Estrutural</option>
         </select>
 
         <label>ID do Engenheiro (Criado no Seed):</label>
-        <input type="number" name="createdById" value="1" required>
+        <input type="number" id="createdById" value="2" required>
 
-        <label>Ficheiro (PDF ou DWG):</label>
-        <input type="file" name="file" required>
+        <label>Ficheiro Técnico (PDF ou Imagem):</label>
+        <input type="file" id="file" required>
 
-        <button type="submit">Fazer Upload e Gerar Revisão</button>
+        <button type="submit">Enviar para a Nuvem</button>
     </form>
+
+    <div id="resultado"></div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault(); // Impede a página de recarregar
+            
+            const divResultado = document.getElementById('resultado');
+            divResultado.style.display = 'block';
+            divResultado.innerHTML = 'Enviando para a AWS... Aguarde.';
+            divResultado.style.backgroundColor = '#eef';
+
+            // Monta os dados do formulário
+            const formData = new FormData();
+            formData.append('contractId', document.getElementById('contractId').value);
+            formData.append('codigoDocumento', document.getElementById('codigoDocumento').value);
+            formData.append('titulo', document.getElementById('titulo').value);
+            formData.append('disciplina', document.getElementById('disciplina').value);
+            formData.append('createdById', document.getElementById('createdById').value);
+            formData.append('file', document.getElementById('file').files[0]);
+
+            const token = document.getElementById('token').value;
+
+            try {
+                // Dispara a requisição com o Token de Segurança na frente
+                const response = await fetch('http://localhost:3000/documents/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    divResultado.style.backgroundColor = '#d4edda';
+                    divResultado.innerHTML = `<b>Sucesso!</b> Documento salvo no banco e na nuvem.<br><br>URL da AWS: <a href="${data.revisions[0].filePath}" target="_blank">${data.revisions[0].filePath}</a>`;
+                } else {
+                    divResultado.style.backgroundColor = '#f8d7da';
+                    divResultado.innerHTML = `<b>Erro:</b> ${data.error}`;
+                }
+            } catch (error) {
+                divResultado.style.backgroundColor = '#f8d7da';
+                divResultado.innerHTML = `<b>Falha na comunicação com o servidor.</b>`;
+            }
+        });
+    </script>
 </body>
 </html>
