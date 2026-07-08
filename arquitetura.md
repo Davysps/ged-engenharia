@@ -54,19 +54,18 @@ Mantemos a divisão estrita baseada em Domain-Driven Design (DDD):
 - Autenticação JWT implementada e trancando rotas (CORS ativo).
 - Padrão de Upload alterado de Disco Local para AWS S3 (operando via buffer de memória).
 - Transações atômicas criadas para o roteamento inicial de Documentos (R0).
+- **[ÉPICO 1 CONCLUÍDO] Portal do Cliente (Frontend):** - Aplicação React inicializada com Vite + TS + Tailwind v4 (Feature-Sliced Design).
+  - Tela de Login operando com Context API e persistência de Token JWT via Axios interceptors.
+  - Dashboard de Contratos dinâmico, listando obras baseadas no controle de acesso (RBAC) do usuário.
+  - Componente corporativo de Upload (Drag & Drop) integrado ao endpoint S3.
 
 ## 🚀 Próximas Etapas (Épicos de Resultado Expressivo)
 
-Para sairmos do ambiente de terminal e entregarmos valor visual e de negócios imediato, o foco agora muda para a interface e automação:
+Com a fundação do Frontend e Backend estabelecida, o foco agora é a usabilidade e o fluxo de engenharia dentro dos contratos:
 
-### ÉPICO 1: O Portal do Cliente (Frontend React)
-- Inicializar a aplicação React (Vite + TS + Tailwind v4).
-- Desenvolver a **Tela de Login** conectada ao nosso endpoint `/auth/login`, persistindo o token no navegador.
-- Desenvolver o **Dashboard de Contratos**, listando apenas as obras às quais o usuário logado tem acesso.
-- Criar a **Interface de Upload** arrastar-e-soltar (Drag & Drop), substituindo o nosso antigo HTML de teste por uma interface corporativa.
-
-### ÉPICO 2: Workflow de Aprovação e Visualização
-- Refatorar o endpoint atual de `uploadRevision` (R1, R2) para enviar os novos arquivos para a AWS S3.
+### ÉPICO 2: Workflow de Aprovação, Revisões e Visualização
+- Desenvolver a "Área Exclusiva do Contrato" no Frontend, roteando para painéis específicos baseados na *role* do usuário (GESTOR, ENGENHEIRO, LEITOR).
+- Refatorar o endpoint atual de `uploadRevision` (R1, R2) para enviar os novos arquivos para a AWS S3 de forma fluida.
 - Implementar visualizador de PDF/Imagens nativo na interface React.
 
 ### ÉPICO 3: Automação (Transmittals e IA)
