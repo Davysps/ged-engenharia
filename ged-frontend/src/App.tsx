@@ -3,6 +3,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginForm } from './features/auth/components/LoginForm';
 import { Dashboard } from './features/contracts/components/Dashboard';
+import { ContractLayout } from './features/contracts/components/ContractLayout';
+import { DocumentList } from './features/documents/components/DocumentList';
+import { ApprovalDashboard } from './features/documents/components/ApprovalDashboard';
 
 // 1. Nosso "Guarda de Trânsito": Protege rotas que exigem login
 function PrivateRoute({ children }: { children: ReactNode }) {
@@ -38,6 +41,23 @@ function AppRoutes() {
         } 
       />
       
+      {/* ROTA PAE (ÉPICO 2): Área Exclusiva do Contrato */}
+      <Route 
+        path="/contracts/:contractId" 
+        element={
+          <PrivateRoute>
+            <ContractLayout />
+          </PrivateRoute>
+        }
+      >
+        <Route index element={<div className="p-6 bg-white rounded-md shadow-sm text-gray-700">Visão Geral do Contrato (Em desenvolvimento)</div>} />
+        
+        {/* Rota renderizando a nossa nova tabela de documentos */}
+        <Route path="documents" element={<DocumentList />} />
+        
+        <Route path="approvals" element={<ApprovalDashboard />} />
+      </Route> {/* <--- ESTA É A TAG QUE HAVIA SUMIDO! */}
+
       {/* Rota de fallback: Qualquer URL não mapeada cai aqui */}
       <Route path="*" element={<Navigate to="/dashboard" />} />
     </Routes>

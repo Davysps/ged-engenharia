@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { api } from '../../../lib/axios';
 import { Building2, FolderKanban, LogOut } from 'lucide-react';
-import { UploadForm } from '../../documents/components/UploadForm';
+import { Link } from 'react-router-dom';
 
-// Tipagem baseada no que o seu project.controller.ts retorna
 interface Contract {
   id: number;
   codigo: string;
@@ -73,7 +72,7 @@ export function Dashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {contratos.map((contrato) => (
-              <div key={contrato.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition cursor-pointer">
+              <div key={contrato.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition cursor-pointer flex flex-col">
                 <div className="flex justify-between items-start mb-4">
                   <span className="inline-block px-2.5 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md">
                     {contrato.codigo}
@@ -84,18 +83,18 @@ export function Dashboard() {
                 </div>
                 
                 <h2 className="text-xl font-bold text-gray-800 mb-1">{contrato.nome}</h2>
-                <p className="text-gray-500 text-sm mb-6">Cliente: <span className="font-medium text-gray-700">{contrato.client.nome}</span></p>
+                <p className="text-gray-500 text-sm mb-6 flex-1">Cliente: <span className="font-medium text-gray-700">{contrato.client.nome}</span></p>
                 
-                <button className="w-full py-2 bg-gray-50 hover:bg-blue-50 text-blue-600 font-medium rounded-lg border border-gray-200 hover:border-blue-200 transition">
+                <Link 
+                  to={`/contracts/${contrato.id}`}
+                  className="block text-center w-full py-2 bg-gray-50 hover:bg-blue-50 text-blue-600 font-medium rounded-lg border border-gray-200 hover:border-blue-200 transition"
+                >
                   Acessar Documentos
-                </button>
+                </Link>
               </div>
             ))}
           </div>
         )}
-        <div className="mt-12">
-          <UploadForm />
-        </div>
       </main>
     </div>
   );

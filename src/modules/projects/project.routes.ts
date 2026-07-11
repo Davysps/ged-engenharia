@@ -1,10 +1,13 @@
 import { Router } from 'express';
-import { getProjects } from './project.controller';
-import { verifyToken } from '../../middlewares/auth.middleware'; // <-- NOVO
+import { getProjects, getProjectById, getProjectDocuments } from './project.controller';
+import { verifyToken } from '../../middlewares/auth.middleware';
 
 const router = Router();
 
-// A rota agora exige o token para listar os contratos do usuário
 router.get('/', verifyToken, getProjects);
+router.get('/:id', verifyToken, getProjectById);
+
+// NOVA ROTA: Lista os documentos reais de um contrato
+router.get('/:id/documents', verifyToken, getProjectDocuments);
 
 export default router;

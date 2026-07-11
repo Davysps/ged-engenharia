@@ -6,11 +6,8 @@ import { AuthRequest } from '../../middlewares/auth.middleware';
 
 export const uploadDocument = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    // 1. Removemos o createdById daqui. O frontend não dita mais quem é o autor.
     const { contractId, codigoDocumento, titulo, disciplina } = req.body;
     const file = req.file;
-    
-    // 2. Pegamos o ID real extraído pelo nosso middleware de segurança
     const userId = req.userId; 
 
     if (!userId) {
@@ -23,17 +20,15 @@ export const uploadDocument = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // 3. Envia o Buffer da memória direto para o AWS S3
     const { filePath, fileHash } = await uploadFileToS3(file.buffer, file.originalname, file.mimetype);
 
-    // 4. Salva no banco de dados com a URL da AWS e o ID blindado do usuário
     const newDocument = await prisma.document.create({
       data: {
         contractId: Number(contractId),
         codigoDocumento,
         titulo,
         disciplina: disciplina as Discipline,
-        createdById: userId, // <-- Seguro, extraído do Token
+        createdById: userId,
         revisions: {
           create: {
             versionLabel: 'R0', 
@@ -54,10 +49,17 @@ export const uploadDocument = async (req: AuthRequest, res: Response): Promise<v
   }
 };
 
-export const uploadRevision = async (req: Request, res: Response): Promise<void> => {
+// REFATORADO PARA O ÉPICO 2: Conectado à AWS S3 e tipado com AuthRequest
+export const uploadRevision = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const documentId = Number(req.params.id);
     const file = req.file;
+    const userId = req.userId; // Proteção de rota extraída do JWT
+
+    if (!userId) {
+      res.status(401).json({ error: 'Usuário não autenticado.' });
+      return;
+    }
 
     if (isNaN(documentId)) {
       res.status(400).json({ error: 'ID do documento inválido.' });
@@ -87,11 +89,10 @@ export const uploadRevision = async (req: Request, res: Response): Promise<void>
 
     // 2. Extrai o número da última revisão e incrementa
     let nextVersionNumber = 0;
-    const lastRevision = document.revisions[0]; // O TS avalia como (Revision | undefined)
+    const lastRevision = document.revisions[0];
 
     if (lastRevision) {
-      const lastLabel = lastRevision.versionLabel; // Agora é seguro, lastRevision existe
-      const match = lastLabel.match(/R(\d+)/i); // Captura o número após o "R"
+      const match = lastRevision.versionLabel.match(/R(\d+)/i);
       
       if (match && match[1]) {
         nextVersionNumber = parseInt(match[1], 10) + 1;
@@ -102,7 +103,10 @@ export const uploadRevision = async (req: Request, res: Response): Promise<void>
     
     const nextVersionLabel = `R${nextVersionNumber}`;
 
-    // 3. Executa a criação e atualização atonicamente via transação
+    // 3. FAZ O UPLOAD DO NOVO ARQUIVO DIRETAMENTE PARA A AWS S3
+    const { filePath, fileHash } = await uploadFileToS3(file.buffer, file.originalname, file.mimetype);
+
+    // 4. Executa a criação e atualização atomicamente via transação
     const newRevision = await prisma.$transaction(async (tx) => {
       
       // Passa as versões antigas que não estejam obsoletas para OBSOLETO
@@ -111,14 +115,14 @@ export const uploadRevision = async (req: Request, res: Response): Promise<void>
         data: { status: 'OBSOLETO' }
       });
 
-      // Cria o registro da nova revisão
+      // Cria o registro da nova revisão com a URL da AWS
       return await tx.revision.create({
         data: {
           documentId,
           versionLabel: nextVersionLabel,
-          filePath: file.path,
-          fileHash: file.filename, 
-          status: 'EM_ELABORACAO'
+          filePath: filePath, // URL pública da S3
+          fileHash: fileHash, // Hash seguro
+          status: 'EM_ELABORACAO' // Nasce aguardando aprovação
         }
       });
     });

@@ -58,16 +58,20 @@ Mantemos a divisão estrita baseada em Domain-Driven Design (DDD):
   - Tela de Login operando com Context API e persistência de Token JWT via Axios interceptors.
   - Dashboard de Contratos dinâmico, listando obras baseadas no controle de acesso (RBAC) do usuário.
   - Componente corporativo de Upload (Drag & Drop) integrado ao endpoint S3.
+- **[ÉPICO 2 CONCLUÍDO] Integração S3, Revisões e Visualização:**
+  - Área Exclusiva do Contrato desenvolvida no Frontend, isolando o roteamento baseado no contexto da obra.
+  - Tabela dinâmica conectada ao banco de dados, exibindo o acervo técnico real com base na segurança RBAC.
+  - Visualizador de PDF/Imagens Nativo implementado na interface React (sem necessidade de downloads).
+  - Fluxo de Upload blindado no Node.js (criação R0 e novas revisões R1, R2 enviando os artefatos físicos direto para a AWS S3 de forma fluida).
+  - *Nota de Arquitetura:* A tela de `ApprovalDashboard` foi construída visualmente no Frontend, aguardando integração com o banco de dados.
 
 ## 🚀 Próximas Etapas (Épicos de Resultado Expressivo)
 
-Com a fundação do Frontend e Backend estabelecida, o foco agora é a usabilidade e o fluxo de engenharia dentro dos contratos:
+### ÉPICO 3: Integração do Fluxo de Aprovações (Workflow)
+- Atualizar o `schema.prisma` adicionando as tabelas e modelos de `ApprovalWorkflow` atrelados às revisões.
+- Criar os endpoints no Backend (Node.js) para buscar pendências, aprovar (`POST /approvals/:id/approve`) e rejeitar (`POST /approvals/:id/reject`).
+- Conectar a tela `ApprovalDashboard.tsx` (atualmente com Mocks de interface) à nova API real, finalizando o clico de gestão do projeto.
 
-### ÉPICO 2: Workflow de Aprovação, Revisões e Visualização
-- Desenvolver a "Área Exclusiva do Contrato" no Frontend, roteando para painéis específicos baseados na *role* do usuário (GESTOR, ENGENHEIRO, LEITOR).
-- Refatorar o endpoint atual de `uploadRevision` (R1, R2) para enviar os novos arquivos para a AWS S3 de forma fluida.
-- Implementar visualizador de PDF/Imagens nativo na interface React.
-
-### ÉPICO 3: Automação (Transmittals e IA)
+### ÉPICO 4: Automação (Transmittals e IA)
 - Funcionalidade de gerar GRD (Guia de Remessa) compilando múltiplos arquivos do S3 em um ZIP estruturado com protocolo.
 - Preparação do terreno para RPA em Python para extração de selos via OCR.
