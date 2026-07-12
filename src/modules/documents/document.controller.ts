@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { Discipline } from '@prisma/client';
+import { Discipline, RevisionStatus, ApprovalStatus } from '@prisma/client';
 import { prisma } from '../../prisma';
 import { uploadFileToS3 } from '../../services/s3.service';
 import { AuthRequest } from '../../middlewares/auth.middleware';
@@ -34,11 +34,20 @@ export const uploadDocument = async (req: AuthRequest, res: Response): Promise<v
             versionLabel: 'R0', 
             filePath: filePath, 
             fileHash: fileHash, 
+            status: RevisionStatus.EM_REVISAO, // <-- Injeção Estrita do Enum
+            approvalWorkflow: {
+              create: {
+                requesterId: userId,
+                status: ApprovalStatus.PENDENTE // <-- Injeção Estrita do Enum
+              }
+            }
           }
         }
       },
       include: {
-        revisions: true 
+        revisions: {
+          include: { approvalWorkflow: true }
+        } 
       }
     });
 
@@ -49,12 +58,11 @@ export const uploadDocument = async (req: AuthRequest, res: Response): Promise<v
   }
 };
 
-// REFATORADO PARA O ÉPICO 2: Conectado à AWS S3 e tipado com AuthRequest
 export const uploadRevision = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const documentId = Number(req.params.id);
     const file = req.file;
-    const userId = req.userId; // Proteção de rota extraída do JWT
+    const userId = req.userId;
 
     if (!userId) {
       res.status(401).json({ error: 'Usuário não autenticado.' });
@@ -71,7 +79,6 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // 1. Busca a última revisão para definir a próxima etiqueta (R1, R2...)
     const document = await prisma.document.findUnique({
       where: { id: documentId },
       include: {
@@ -87,7 +94,6 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // 2. Extrai o número da última revisão e incrementa
     let nextVersionNumber = 0;
     const lastRevision = document.revisions[0];
 
@@ -103,26 +109,31 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
     
     const nextVersionLabel = `R${nextVersionNumber}`;
 
-    // 3. FAZ O UPLOAD DO NOVO ARQUIVO DIRETAMENTE PARA A AWS S3
     const { filePath, fileHash } = await uploadFileToS3(file.buffer, file.originalname, file.mimetype);
 
-    // 4. Executa a criação e atualização atomicamente via transação
     const newRevision = await prisma.$transaction(async (tx) => {
       
-      // Passa as versões antigas que não estejam obsoletas para OBSOLETO
       await tx.revision.updateMany({
-        where: { documentId, status: { not: 'OBSOLETO' } },
-        data: { status: 'OBSOLETO' }
+        where: { documentId, status: { not: RevisionStatus.OBSOLETO } }, // <-- Injeção Estrita
+        data: { status: RevisionStatus.OBSOLETO }
       });
 
-      // Cria o registro da nova revisão com a URL da AWS
       return await tx.revision.create({
         data: {
           documentId,
           versionLabel: nextVersionLabel,
-          filePath: filePath, // URL pública da S3
-          fileHash: fileHash, // Hash seguro
-          status: 'EM_ELABORACAO' // Nasce aguardando aprovação
+          filePath: filePath,
+          fileHash: fileHash, 
+          status: RevisionStatus.EM_REVISAO, // <-- Injeção Estrita
+          approvalWorkflow: {
+            create: {
+              requesterId: userId,
+              status: ApprovalStatus.PENDENTE // <-- Injeção Estrita
+            }
+          }
+        },
+        include: {
+          approvalWorkflow: true
         }
       });
     });

@@ -13,7 +13,7 @@ datasource db {
 // --- ENUMS ---
 enum GlobalRole {
   SYSADMIN      // Dono do SaaS (nós)
-  USER          // Usuário comum logado
+  USER          // Utilizador comum logado
 }
 
 enum ContractRole {
@@ -29,6 +29,12 @@ enum RevisionStatus {
   APROVADO
   REJEITADO
   OBSOLETO
+}
+
+enum ApprovalStatus {
+  PENDENTE
+  APROVADO
+  REJEITADO
 }
 
 enum Discipline {
@@ -71,14 +77,18 @@ model User {
   email             String               @unique
   senhaHash         String               @map("senha_hash")
   globalRole        GlobalRole           @default(USER)
-  contracts         ContractMembership[] // Contratos que este usuário tem acesso
+  
+  contracts         ContractMembership[] 
   documentsCreated  Document[]           @relation("UserCreatedDocuments")
-  approvedRevisions Revision[]           @relation("UserApprovedRevisions")
+  
+  // Relacionamentos para o Workflow de Aprovação
+  requestedApprovals ApprovalWorkflow[]  @relation("UserRequestedApprovals")
+  reviewedApprovals  ApprovalWorkflow[]  @relation("UserReviewedApprovals")
+  
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
 }
 
-// Tabela pivô de Controle de Acesso (RBAC) Granular
 model ContractMembership {
   id         Int          @id @default(autoincrement())
   user       User         @relation(fields: [userId], references: [id])
@@ -88,7 +98,7 @@ model ContractMembership {
   role       ContractRole @default(LEITOR)
   createdAt  DateTime     @default(now())
 
-  @@unique([userId, contractId]) // Um usuário só tem uma role (permissão) por contrato
+  @@unique([userId, contractId])
 }
 
 model Document {
@@ -98,26 +108,53 @@ model Document {
   codigoDocumento String     @map("codigo_documento")
   titulo          String
   disciplina      Discipline
-  metadata        Json?      // Para futuros dados extraídos via IA
+  metadata        Json?
   createdBy       User       @relation("UserCreatedDocuments", fields: [createdById], references: [id])
   createdById     Int
   createdAt       DateTime   @default(now())
   revisions       Revision[]
 
-  @@unique([contractId, codigoDocumento]) // Não pode haver códigos duplicados no mesmo contrato
+  @@unique([contractId, codigoDocumento])
 }
 
 model Revision {
-  id           Int            @id @default(autoincrement())
-  document     Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  documentId   Int
-  versionLabel String         // Ex: R0, R1, A, B
-  filePath     String
-  fileHash     String
-  status       RevisionStatus @default(EM_ELABORACAO)
-  approvedBy   User?          @relation("UserApprovedRevisions", fields: [approvedById], references: [id])
-  approvedById Int?
-  approvedAt   DateTime?
-  comments     Json?          // Para futuro Markup/Redlining
-  createdAt    DateTime       @default(now())
+  id               Int               @id @default(autoincrement())
+  document         Document          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId       Int
+  versionLabel     String            // Ex: R0, R1, A, B
+  filePath         String
+  fileHash         String
+  status           RevisionStatus    @default(EM_ELABORACAO)
+  comments         Json?             // Para futuro Markup/Redlining
+  createdAt        DateTime          @default(now())
+  
+  // Relação 1-para-1 com o motor de Workflow
+  approvalWorkflow ApprovalWorkflow? 
+}
+
+// --- NOVO MODELO: ÉPICO 3 ---
+model ApprovalWorkflow {
+  id          Int            @id @default(autoincrement())
+  
+  // Ligação rigorosa à Revisão
+  revision    Revision       @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  revisionId  Int            @unique
+  
+  // Solicitante (ENGENHEIRO ou GESTOR que submeteu)
+  requester   User           @relation("UserRequestedApprovals", fields: [requesterId], references: [id])
+  requesterId Int
+  
+  // Aprovador (GESTOR ou APROVADOR que validou/rejeitou)
+  reviewer    User?          @relation("UserReviewedApprovals", fields: [reviewerId], references: [id])
+  reviewerId  Int?
+  
+  status      ApprovalStatus @default(PENDENTE)
+  comments    String?        @db.Text // Justificativa obrigatória em caso de rejeição
+  
+  requestedAt DateTime       @default(now()) // Mapeia para dataSolicitacao no Frontend
+  reviewedAt  DateTime?
+
+  // Índices para otimizar o filtro do Dashboard
+  @@index([status])
+  @@index([requesterId])
 }

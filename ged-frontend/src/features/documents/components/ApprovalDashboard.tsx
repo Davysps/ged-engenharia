@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useContract } from '../../../contexts/ContractContext';
-import { CheckCircle, XCircle, Clock, FileSignature } from 'lucide-react';
+import { api } from '../../../lib/axios'; // <-- Importação da nossa instância configurada do Axios
+import { CheckCircle, XCircle, Clock, FileSignature, AlertCircle } from 'lucide-react';
 
 interface PendingApproval {
   id: number;
@@ -15,43 +16,62 @@ export function ApprovalDashboard() {
   const { contract, role } = useContract();
   const [pendingDocs, setPendingDocs] = useState<PendingApproval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // RBAC de Segurança: Só Gestores e Aprovadores podem ver as ações
+  // RBAC de Segurança no Frontend
   const canApprove = role === 'GESTOR' || role === 'APROVADOR';
 
+  // Buscar pendências reais do backend assim que o contrato ativo mudar
   useEffect(() => {
-    // Mock temporário simulando a busca na API por documentos aguardando aprovação
-    setTimeout(() => {
-      setPendingDocs([
-        {
-          id: 1,
-          codigoDocumento: 'VALE-MEC-DIA-010',
-          revisao: 'R1',
-          disciplina: 'MECÂNICA',
-          solicitante: 'Carlos Engenheiro',
-          dataSolicitacao: '2026-07-10T14:30:00Z'
-        },
-        {
-          id: 2,
-          codigoDocumento: 'VALE-CIV-PLA-001',
-          revisao: 'R2',
-          disciplina: 'CIVIL',
-          solicitante: 'Ana Projetista',
-          dataSolicitacao: '2026-07-11T09:15:00Z'
-        }
-      ]);
-      setIsLoading(false);
-    }, 600);
-  }, [contract?.id]);
+    if (!contract?.id || !canApprove) return;
 
-  const handleApprove = (id: number) => {
-    // Aqui entrará a chamada POST para /approvals/:id/approve
-    setPendingDocs(docs => docs.filter(doc => doc.id !== id));
+    async function fetchApprovals() {
+      try {
+        setIsLoading(true);
+        setErrorMessage(null);
+        const response = await api.get<PendingApproval[]>('/approvals', {
+          params: { contractId: contract?.id }
+        });
+        setPendingDocs(response.data);
+      } catch (error: any) {
+        console.error('Erro ao carregar o painel de aprovações:', error);
+        setErrorMessage(error.response?.data?.error || 'Não foi possível carregar as pendências.');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchApprovals();
+  }, [contract?.id, role, canApprove]);
+
+  const handleApprove = async (id: number) => {
+    try {
+      setErrorMessage(null);
+      await api.post(`/approvals/${id}/approve`);
+      // Otimização de UI: Remove do estado local sem forçar um re-render completo do backend
+      setPendingDocs(docs => docs.filter(doc => doc.id !== id));
+    } catch (error: any) {
+      setErrorMessage(error.response?.data?.error || 'Erro ao aprovar documento.');
+    }
   };
 
-  const handleReject = (id: number) => {
-    // Aqui entrará a chamada POST para /approvals/:id/reject
-    setPendingDocs(docs => docs.filter(doc => doc.id !== id));
+  const handleReject = async (id: number) => {
+    // Abordagem pragmática e limpa para recolher o comentário obrigatório do fluxo técnico
+    const comments = window.prompt('Introduza obrigatoriamente a justificativa técnica para a rejeição deste documento:');
+    
+    if (comments === null) return; // Utilizador cancelou o prompt
+    if (!comments.trim()) {
+      window.alert('Ação cancelada: É obrigatório fornecer uma justificativa para rejeitar o arquivo.');
+      return;
+    }
+
+    try {
+      setErrorMessage(null);
+      await api.post(`/approvals/${id}/reject`, { comments });
+      setPendingDocs(docs => docs.filter(doc => doc.id !== id));
+    } catch (error: any) {
+      setErrorMessage(error.response?.data?.error || 'Erro ao rejeitar documento.');
+    }
   };
 
   if (!canApprove) {
@@ -59,12 +79,12 @@ export function ApprovalDashboard() {
       <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-red-100">
         <XCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
         <h2 className="text-xl font-bold text-gray-800">Acesso Restrito</h2>
-        <p className="text-gray-500 mt-2">Seu perfil ({role}) não tem permissão para aprovar documentos nesta obra.</p>
+        <p className="text-gray-500 mt-2">O seu perfil ({role}) não tem permissão para aprovar ou rejeitar documentos nesta obra.</p>
       </div>
     );
   }
 
-  if (isLoading) return <div className="p-6 text-gray-500 animate-pulse">Buscando pendências...</div>;
+  if (isLoading) return <div className="p-6 text-gray-500 animate-pulse">A procurar pendências no acervo técnico...</div>;
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -84,12 +104,19 @@ export function ApprovalDashboard() {
         </div>
       </div>
 
+      {errorMessage && (
+        <div className="p-4 mx-6 mt-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2 text-sm">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
       <div className="p-6">
         {pendingDocs.length === 0 ? (
           <div className="text-center py-12">
             <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900">Tudo em dia!</h3>
-            <p className="text-gray-500">Não há documentos aguardando a sua aprovação no momento.</p>
+            <p className="text-gray-500">Não existem documentos a aguardar a sua revisão técnica neste momento.</p>
           </div>
         ) : (
           <div className="grid gap-4">

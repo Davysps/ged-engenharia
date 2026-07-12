@@ -27,6 +27,7 @@ A fundação de dados foi migrada para suportar múltiplos clientes:
 2. **User & ContractMembership:** Usuários existem globalmente, mas o acesso aos contratos é ditado pela tabela pivô `ContractMembership`, que define a *role* específica daquele usuário naquele contrato.
 3. **Document:** Metadados imutáveis de um arquivo técnico (ex: Código "VALE-CIV-PLA-001", Disciplina "CIVIL"). Pertence a um `Contract`.
 4. **Revision:** O histórico físico. Cada documento tem 1 ou N revisões (R0, R1, R2). Apenas a URL do AWS S3 e o Hash ficam salvos aqui.
+5. **ApprovalWorkflow:** Entidade com relação 1-para-1 com a Revisão, responsável por auditar quem solicitou, quem aprovou/rejeitou, a data e a justificativa técnica.
 
 ## Regras de Negócio Core
 - O versionamento é imutável. Um documento nasce na R0. Se houver alteração, sobe-se um novo arquivo gerando a R1, marcando a R0 como "OBSOLETO". O ID do documento raiz não muda.
@@ -40,10 +41,9 @@ Mantemos a divisão estrita baseada em Domain-Driven Design (DDD):
       /services      -> Integrações externas (s3.service.ts)
       /modules
         /auth        -> Domínio de autenticação (Login)
-        /projects    -> (Nota: A renomear futuramente para /contracts)
+        /projects    -> Domínio de contratos e obras
         /documents   -> Domínio de documentos e revisões
-          - document.controller.ts
-          - document.routes.ts
+        /approvals   -> Domínio do workflow de aprovação
       - server.ts    -> Ponto de entrada
       - prisma.ts    -> Instância Singleton do ORM
 
@@ -55,23 +55,34 @@ Mantemos a divisão estrita baseada em Domain-Driven Design (DDD):
 - Padrão de Upload alterado de Disco Local para AWS S3 (operando via buffer de memória).
 - Transações atômicas criadas para o roteamento inicial de Documentos (R0).
 - **[ÉPICO 1 CONCLUÍDO] Portal do Cliente (Frontend):** - Aplicação React inicializada com Vite + TS + Tailwind v4 (Feature-Sliced Design).
-  - Tela de Login operando com Context API e persistência de Token JWT via Axios interceptors.
-  - Dashboard de Contratos dinâmico, listando obras baseadas no controle de acesso (RBAC) do usuário.
-  - Componente corporativo de Upload (Drag & Drop) integrado ao endpoint S3.
+  - Tela de Login operando com Context API e persistência de Token JWT.
+  - Dashboard de Contratos dinâmico, listando obras baseadas no controle de acesso (RBAC).
 - **[ÉPICO 2 CONCLUÍDO] Integração S3, Revisões e Visualização:**
-  - Área Exclusiva do Contrato desenvolvida no Frontend, isolando o roteamento baseado no contexto da obra.
-  - Tabela dinâmica conectada ao banco de dados, exibindo o acervo técnico real com base na segurança RBAC.
-  - Visualizador de PDF/Imagens Nativo implementado na interface React (sem necessidade de downloads).
-  - Fluxo de Upload blindado no Node.js (criação R0 e novas revisões R1, R2 enviando os artefatos físicos direto para a AWS S3 de forma fluida).
-  - *Nota de Arquitetura:* A tela de `ApprovalDashboard` foi construída visualmente no Frontend, aguardando integração com o banco de dados.
+  - Área Exclusiva do Contrato desenvolvida no Frontend.
+  - Tabela dinâmica conectada ao banco de dados, exibindo o acervo técnico real.
+  - Visualizador de PDF/Imagens Nativo implementado na interface React.
+  - Fluxo de Upload blindado no Node.js (criação R0 e novas revisões R1, R2 enviando para S3).
+- **[ÉPICO 3 CONCLUÍDO] Integração do Fluxo de Aprovações (Workflow):**
+  - Entidade `ApprovalWorkflow` modelada no Prisma com transações atômicas aninhadas (Nested Updates).
+  - Controle rígido de Enums e tipagem para evitar falhas silenciosas no ORM.
+  - Criação automática de pendências no momento do upload de documentos e revisões.
+  - Painel de Aprovações no Frontend consumindo dados reais da API com proteção RBAC (somente GESTOR e APROVADOR processam documentos).
+  - Justificativa técnica obrigatória acoplada à rejeição de arquivos.
+
+---
 
 ## 🚀 Próximas Etapas (Épicos de Resultado Expressivo)
 
-### ÉPICO 3: Integração do Fluxo de Aprovações (Workflow)
-- Atualizar o `schema.prisma` adicionando as tabelas e modelos de `ApprovalWorkflow` atrelados às revisões.
-- Criar os endpoints no Backend (Node.js) para buscar pendências, aprovar (`POST /approvals/:id/approve`) e rejeitar (`POST /approvals/:id/reject`).
-- Conectar a tela `ApprovalDashboard.tsx` (atualmente com Mocks de interface) à nova API real, finalizando o clico de gestão do projeto.
+### ÉPICO 4: Automação e Transmittals (Guias de Remessa)
+- **Modelagem:** Criar a tabela `Transmittal` para agrupar documentos aprovados.
+- **Backend (Node.js):** Endpoint para selecionar documentos aprovados e gerar o protocolo de envio.
+- **Integração Python:** Construir um microsserviço ou script Python responsável por ler os documentos S3 de um Transmittal, gerar um PDF de "Capa de Lote" (com QR Codes) e empacotar tudo num arquivo `.zip`.
+- **Frontend:** Nova aba "Transmittals" para visualização e emissão oficial de pacotes para o cliente.
 
-### ÉPICO 4: Automação (Transmittals e IA)
-- Funcionalidade de gerar GRD (Guia de Remessa) compilando múltiplos arquivos do S3 em um ZIP estruturado com protocolo.
-- Preparação do terreno para RPA em Python para extração de selos via OCR.
+### ÉPICO 5: Extração Inteligente de Metadados (IA / OCR)
+- **RPA Python:** Criar um serviço autônomo que, ao receber uma planta em PDF, faz a leitura do "selo" do projeto (carimbo no canto inferior direito).
+- **Auto-preenchimento:** Extrair automaticamente Título, Código do Documento e Disciplina para reduzir o trabalho manual do Engenheiro durante o Upload.
+
+### ÉPICO 6: Dashboard Analítico e Relatórios
+- **Métricas:** Fornecer ao GESTOR gráficos de tempo médio de aprovação, gargalos por disciplina (ex: "Estrutural demora mais que Elétrica") e volume de revisões.
+- **Exportação:** Geração de relatórios em Excel/CSV do acervo técnico atualizado (Lista de Documentos - LD).

@@ -1,17 +1,16 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import cors from 'cors'; // <-- 1. Importe a biblioteca
+import cors from 'cors'; 
 import authRoutes from './modules/auth/auth.routes';
 import projectRoutes from './modules/projects/project.routes';
 import documentRoutes from './modules/documents/document.routes'; 
+import approvalRoutes from './modules/approvals/approval.routes'; // <-- IMPORTAÇÃO DO NOVO MÓDULO
 
 dotenv.config();
 
 const app = express();
 
-// <-- 2. Ative o CORS ANTES de qualquer rota ou middleware
 app.use(cors()); 
-
 app.use(express.json());
 
 app.get('/health', (req, res) => {
@@ -21,6 +20,7 @@ app.get('/health', (req, res) => {
 app.use('/auth', authRoutes);
 app.use('/projects', projectRoutes);
 app.use('/documents', documentRoutes); 
+app.use('/approvals', approvalRoutes); // <-- REGISTRO DA ROTA (O Fim do Erro 404)
 
 const PORT = process.env.PORT || 3000;
 
