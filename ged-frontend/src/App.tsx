@@ -6,12 +6,13 @@ import { Dashboard } from './features/contracts/components/Dashboard';
 import { ContractLayout } from './features/contracts/components/ContractLayout';
 import { DocumentList } from './features/documents/components/DocumentList';
 import { ApprovalDashboard } from './features/documents/components/ApprovalDashboard';
+import { TransmittalDashboard } from './features/transmittals/components/TransmittalDashboard';
 
 // 1. Nosso "Guarda de Trânsito": Protege rotas que exigem login
 function PrivateRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
-  // Se não estiver autenticado, chuta o usuário de volta pro login
-  return isAuthenticated ? children : <Navigate to="/login" />;
+  // CORREÇÃO: Utilização rigorosa do 'replace' para evitar loops de redirecionamento no histórico
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
 }
 
 // 2. Configuração das Rotas
@@ -23,8 +24,8 @@ function AppRoutes() {
       <Route 
         path="/login" 
         element={
-          // Se já estiver logado e tentar acessar /login, manda pro dashboard
-          isAuthenticated ? <Navigate to="/dashboard" /> : (
+          // CORREÇÃO: O componente Navigate agora usa 'replace' para prevenir a falha de "Maximum update depth"
+          isAuthenticated ? <Navigate to="/dashboard" replace /> : (
             <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
               <LoginForm />
             </div>
@@ -56,10 +57,13 @@ function AppRoutes() {
         <Route path="documents" element={<DocumentList />} />
         
         <Route path="approvals" element={<ApprovalDashboard />} />
-      </Route> {/* <--- ESTA É A TAG QUE HAVIA SUMIDO! */}
+        
+        {/* INJEÇÃO CIRÚRGICA - ÉPICO 4: Guias de Remessa */}
+        <Route path="transmittals" element={<TransmittalDashboard />} />
+      </Route>
 
-      {/* Rota de fallback: Qualquer URL não mapeada cai aqui */}
-      <Route path="*" element={<Navigate to="/dashboard" />} />
+      {/* Rota de fallback: Qualquer URL não mapeada cai aqui. CORREÇÃO: replace adicionado. */}
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }

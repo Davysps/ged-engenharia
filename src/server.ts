@@ -4,7 +4,8 @@ import cors from 'cors';
 import authRoutes from './modules/auth/auth.routes';
 import projectRoutes from './modules/projects/project.routes';
 import documentRoutes from './modules/documents/document.routes'; 
-import approvalRoutes from './modules/approvals/approval.routes'; // <-- IMPORTAÇÃO DO NOVO MÓDULO
+import approvalRoutes from './modules/approvals/approval.routes';
+import { transmittalRoutes } from './modules/transmittals/transmittal.routes';
 
 dotenv.config();
 
@@ -20,7 +21,8 @@ app.get('/health', (req, res) => {
 app.use('/auth', authRoutes);
 app.use('/projects', projectRoutes);
 app.use('/documents', documentRoutes); 
-app.use('/approvals', approvalRoutes); // <-- REGISTRO DA ROTA (O Fim do Erro 404)
+app.use('/approvals', approvalRoutes);
+app.use(transmittalRoutes);
 
 const PORT = process.env.PORT || 3000;
 

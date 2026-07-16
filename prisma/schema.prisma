@@ -47,6 +47,13 @@ enum Discipline {
   OUTRO
 }
 
+// NOVO: ÉPICO 4 - Controlo de estado assíncrono para o worker Python
+enum TransmittalStatus {
+  EM_PROCESSAMENTO // Node registou e enviou para o Python
+  CONCLUIDO        // Python terminou de gerar ZIP e PDF no S3
+  ERRO             // Falha no processamento pelo worker
+}
+
 // --- MODELS ---
 
 model Client {
@@ -67,6 +74,10 @@ model Contract {
   descricao   String?
   memberships ContractMembership[]
   documents   Document[]
+  
+  // Relação Épico 4
+  transmittals Transmittal[]
+
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
 }
@@ -81,10 +92,12 @@ model User {
   contracts         ContractMembership[] 
   documentsCreated  Document[]           @relation("UserCreatedDocuments")
   
-  // Relacionamentos para o Workflow de Aprovação
   requestedApprovals ApprovalWorkflow[]  @relation("UserRequestedApprovals")
   reviewedApprovals  ApprovalWorkflow[]  @relation("UserReviewedApprovals")
   
+  // Relação Épico 4
+  createdTransmittals Transmittal[]      @relation("UserCreatedTransmittals")
+
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
 }
@@ -128,33 +141,70 @@ model Revision {
   comments         Json?             // Para futuro Markup/Redlining
   createdAt        DateTime          @default(now())
   
-  // Relação 1-para-1 com o motor de Workflow
-  approvalWorkflow ApprovalWorkflow? 
+  approvalWorkflow ApprovalWorkflow?
+
+  // Relação Épico 4
+  transmittalItems TransmittalItem[]
 }
 
-// --- NOVO MODELO: ÉPICO 3 ---
 model ApprovalWorkflow {
   id          Int            @id @default(autoincrement())
-  
-  // Ligação rigorosa à Revisão
   revision    Revision       @relation(fields: [revisionId], references: [id], onDelete: Cascade)
   revisionId  Int            @unique
-  
-  // Solicitante (ENGENHEIRO ou GESTOR que submeteu)
   requester   User           @relation("UserRequestedApprovals", fields: [requesterId], references: [id])
   requesterId Int
-  
-  // Aprovador (GESTOR ou APROVADOR que validou/rejeitou)
   reviewer    User?          @relation("UserReviewedApprovals", fields: [reviewerId], references: [id])
   reviewerId  Int?
-  
   status      ApprovalStatus @default(PENDENTE)
-  comments    String?        @db.Text // Justificativa obrigatória em caso de rejeição
-  
-  requestedAt DateTime       @default(now()) // Mapeia para dataSolicitacao no Frontend
+  comments    String?        @db.Text
+  requestedAt DateTime       @default(now())
   reviewedAt  DateTime?
 
-  // Índices para otimizar o filtro do Dashboard
   @@index([status])
   @@index([requesterId])
+}
+
+// --- NOVO MODELO: ÉPICO 4 ---
+
+model Transmittal {
+  id          Int               @id @default(autoincrement())
+  contract    Contract          @relation(fields: [contractId], references: [id])
+  contractId  Int
+  codigo      String            
+  
+  // Novos campos corporativos
+  destinatario String?          @db.VarChar(100) // Para quem vai a GRD
+  proposito    String           @default("PARA_CONHECIMENTO") // Motivo da Emissão
+  
+  assunto     String
+  mensagem    String?           @db.Text
+  
+  status      TransmittalStatus @default(EM_PROCESSAMENTO)
+  
+  zipUrl      String?
+  pdfCapaUrl  String?
+
+  createdBy   User              @relation("UserCreatedTransmittals", fields: [createdById], references: [id])
+  createdById Int
+
+  items       TransmittalItem[]
+
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@unique([contractId, codigo])
+  @@index([status])
+}
+
+model TransmittalItem {
+  id             Int         @id @default(autoincrement())
+  transmittal    Transmittal @relation(fields: [transmittalId], references: [id], onDelete: Cascade)
+  transmittalId  Int
+  
+  // Ligamos explicitamente à Revisão (o que foi enviado de facto), não ao Documento abstrato.
+  revision       Revision    @relation(fields: [revisionId], references: [id])
+  revisionId     Int
+
+  // Garante que a mesma revisão não é inserida duas vezes no mesmo Transmittal
+  @@unique([transmittalId, revisionId])
 }

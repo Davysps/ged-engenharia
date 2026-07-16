@@ -79,6 +79,18 @@ const ContractLayoutInner: React.FC = () => {
               Painel de Aprovações
             </Link>
           )}
+
+          {/* INJEÇÃO CIRÚRGICA - ÉPICO 4: Guias de Remessa (Acessível a todos para download) */}
+          <Link
+            to={`/contracts/${contract.id}/transmittals`}
+            className={`block px-4 py-2.5 rounded-md transition-colors ${
+              location.pathname.includes('/transmittals') 
+                ? 'bg-blue-50 text-blue-700 font-medium' 
+                : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            Guias de Remessa
+          </Link>
         </nav>
       </aside>
 
