@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../lib/axios'; 
 import { useContract } from '../../../contexts/ContractContext';
-import { FileText, UploadCloud, Eye, History } from 'lucide-react';
+import { FileText, UploadCloud, Eye, History, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { UploadForm } from './UploadForm';
 import { DocumentViewer } from './DocumentViewer'; 
 import { RevisionUploadForm } from './RevisionUploadForm';
@@ -13,11 +13,14 @@ interface Revision {
   createdAt: string;
 }
 
-// CORREÇÃO: Atualizado para casar exatamente com o Prisma (codigoDocumento)
+// Atualizado para receber os dados do Épico 5 (OCR/RPA)
 interface Document {
   id: number;
   codigoDocumento: string; 
   disciplina: string;
+  ocrStatus: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  projectNumber: string | null;
+  extractedRevision: string | null;
   revisions: Revision[];
 }
 
@@ -31,6 +34,7 @@ export function DocumentList() {
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [selectedFileUrl, setSelectedFileUrl] = useState<string | null>(null);
   const [selectedFileName, setSelectedFileName] = useState('');
+  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
 
   const [isRevModalOpen, setIsRevModalOpen] = useState(false);
   const [revDocId, setRevDocId] = useState<number | null>(null);
@@ -38,7 +42,8 @@ export function DocumentList() {
 
   const canUpload = role === 'GESTOR' || role === 'ENGENHEIRO';
 
-  const handleViewDocument = (url: string, nome: string) => {
+  const handleViewDocument = (doc: Document, url: string, nome: string) => {
+    setSelectedDocument(doc);
     setSelectedFileUrl(url);
     setSelectedFileName(nome);
     setIsViewerOpen(true);
@@ -60,6 +65,32 @@ export function DocumentList() {
   useEffect(() => {
     fetchDocuments();
   }, [contract?.id]);
+
+  const renderOcrStatus = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+      case 'PROCESSING':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-md font-medium">
+            <Clock className="w-3.5 h-3.5" /> A Extrair RPA...
+          </span>
+        );
+      case 'COMPLETED':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-800 text-xs rounded-md font-medium">
+            <CheckCircle className="w-3.5 h-3.5" /> Metadados Lidos
+          </span>
+        );
+      case 'FAILED':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-100 text-red-800 text-xs rounded-md font-medium">
+            <AlertCircle className="w-3.5 h-3.5" /> Falha no OCR
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
 
   if (isLoading) return <div className="p-6 text-gray-500 animate-pulse">Carregando acervo técnico...</div>;
 
@@ -93,13 +124,14 @@ export function DocumentList() {
                 <th className="p-4 font-semibold">Código do Documento</th>
                 <th className="p-4 font-semibold">Disciplina</th>
                 <th className="p-4 font-semibold">Revisão Atual</th>
+                <th className="p-4 font-semibold">Status RPA/OCR</th>
                 <th className="p-4 font-semibold text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {documents.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="p-8 text-center text-gray-500">Nenhum documento encontrado neste contrato.</td>
+                  <td colSpan={5} className="p-8 text-center text-gray-500">Nenhum documento encontrado neste contrato.</td>
                 </tr>
               ) : (
                 documents.map((doc) => {
@@ -109,33 +141,35 @@ export function DocumentList() {
 
                   return (
                     <tr key={doc.id} className="hover:bg-gray-50 transition-colors">
-                      {/* CORREÇÃO: Utilizando doc.codigoDocumento */}
                       <td className="p-4 font-medium text-gray-900">{doc.codigoDocumento}</td>
                       <td className="p-4">
                         <span className="px-2.5 py-1 bg-slate-100 text-slate-700 text-xs rounded-md font-medium">{doc.disciplina}</span>
                       </td>
                       <td className="p-4">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-100 text-green-800 text-xs rounded-md font-bold">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-100 text-blue-800 text-xs rounded-md font-bold">
                           {currentRev.versionLabel}
                         </span>
+                      </td>
+                      <td className="p-4">
+                        {renderOcrStatus(doc.ocrStatus)}
                       </td>
                       <td className="p-4 flex justify-end gap-2">
                         
                         <button 
-                          onClick={() => handleViewDocument(currentRev.filePath, `${doc.codigoDocumento} - ${currentRev.versionLabel}`)}
+                          onClick={() => handleViewDocument(doc, currentRev.filePath, `${doc.codigoDocumento} - ${currentRev.versionLabel}`)}
                           className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                          title="Visualizar Documento"
+                          title="Visualizar Documento e Metadados"
                         >
                           <Eye className="w-5 h-5" />
                         </button>
                         
-                        <button className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"><History className="w-5 h-5" /></button>
+                        <button className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors" title="Histórico"><History className="w-5 h-5" /></button>
                         
                         {canUpload && (
                           <button 
                             onClick={() => {
                               setRevDocId(doc.id);
-                              setRevDocCodigo(doc.codigoDocumento); // CORREÇÃO AQUI TAMBÉM
+                              setRevDocCodigo(doc.codigoDocumento); 
                               setIsRevModalOpen(true);
                             }}
                             className="text-sm font-medium text-blue-600 hover:text-blue-800 px-3 py-1.5 border border-blue-200 hover:bg-blue-50 rounded transition-colors ml-2"
@@ -164,6 +198,7 @@ export function DocumentList() {
         onClose={() => setIsViewerOpen(false)}
         fileUrl={selectedFileUrl}
         fileName={selectedFileName}
+        documentData={selectedDocument}
       />
 
       <RevisionUploadForm 

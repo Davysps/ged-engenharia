@@ -2,8 +2,7 @@
 // https://www.prisma.io/docs/concepts/components/prisma-schema
 
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -12,15 +11,15 @@ datasource db {
 
 // --- ENUMS ---
 enum GlobalRole {
-  SYSADMIN      // Dono do SaaS (nós)
-  USER          // Utilizador comum logado
+  SYSADMIN // Dono do SaaS (nós)
+  USER // Utilizador comum logado
 }
 
 enum ContractRole {
-  GESTOR        // Pode criar/editar documentos e convidar pessoas
-  ENGENHEIRO    // Pode submeter novas revisões (R0, R1)
-  APROVADOR     // Pode aprovar/rejeitar revisões
-  LEITOR        // Só pode visualizar/baixar
+  GESTOR // Pode criar/editar documentos e convidar pessoas
+  ENGENHEIRO // Pode submeter novas revisões (R0, R1)
+  APROVADOR // Pode aprovar/rejeitar revisões
+  LEITOR // Só pode visualizar/baixar
 }
 
 enum RevisionStatus {
@@ -47,11 +46,19 @@ enum Discipline {
   OUTRO
 }
 
-// NOVO: ÉPICO 4 - Controlo de estado assíncrono para o worker Python
+// ÉPICO 4 - Controlo de estado assíncrono para o worker Python
 enum TransmittalStatus {
   EM_PROCESSAMENTO // Node registou e enviou para o Python
-  CONCLUIDO        // Python terminou de gerar ZIP e PDF no S3
-  ERRO             // Falha no processamento pelo worker
+  CONCLUIDO // Python terminou de gerar ZIP e PDF no S3
+  ERRO // Falha no processamento pelo worker
+}
+
+// NOVO: ÉPICO 5 - Controlo de estado do OCR
+enum DocumentOcrStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }
 
 // --- MODELS ---
@@ -74,32 +81,32 @@ model Contract {
   descricao   String?
   memberships ContractMembership[]
   documents   Document[]
-  
+
   // Relação Épico 4
   transmittals Transmittal[]
 
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model User {
-  id                Int                  @id @default(autoincrement())
-  nome              String
-  email             String               @unique
-  senhaHash         String               @map("senha_hash")
-  globalRole        GlobalRole           @default(USER)
-  
-  contracts         ContractMembership[] 
-  documentsCreated  Document[]           @relation("UserCreatedDocuments")
-  
-  requestedApprovals ApprovalWorkflow[]  @relation("UserRequestedApprovals")
-  reviewedApprovals  ApprovalWorkflow[]  @relation("UserReviewedApprovals")
-  
-  // Relação Épico 4
-  createdTransmittals Transmittal[]      @relation("UserCreatedTransmittals")
+  id         Int        @id @default(autoincrement())
+  nome       String
+  email      String     @unique
+  senhaHash  String     @map("senha_hash")
+  globalRole GlobalRole @default(USER)
 
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  contracts        ContractMembership[]
+  documentsCreated Document[]           @relation("UserCreatedDocuments")
+
+  requestedApprovals ApprovalWorkflow[] @relation("UserRequestedApprovals")
+  reviewedApprovals  ApprovalWorkflow[] @relation("UserReviewedApprovals")
+
+  // Relação Épico 4
+  createdTransmittals Transmittal[] @relation("UserCreatedTransmittals")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model ContractMembership {
@@ -122,25 +129,32 @@ model Document {
   titulo          String
   disciplina      Discipline
   metadata        Json?
-  createdBy       User       @relation("UserCreatedDocuments", fields: [createdById], references: [id])
-  createdById     Int
-  createdAt       DateTime   @default(now())
-  revisions       Revision[]
+
+  // NOVO: ÉPICO 5 - Extração Inteligente (RPA/OCR)
+  ocrStatus         DocumentOcrStatus @default(PENDING)
+  projectNumber     String?
+  extractedRevision String? // Nomeado para não conflitar com a relação "revisions"
+  extractedMetadata Json? // Payload bruto do AWS Textract para auditoria
+
+  createdBy   User       @relation("UserCreatedDocuments", fields: [createdById], references: [id])
+  createdById Int
+  createdAt   DateTime   @default(now())
+  revisions   Revision[]
 
   @@unique([contractId, codigoDocumento])
 }
 
 model Revision {
-  id               Int               @id @default(autoincrement())
-  document         Document          @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  documentId       Int
-  versionLabel     String            // Ex: R0, R1, A, B
-  filePath         String
-  fileHash         String
-  status           RevisionStatus    @default(EM_ELABORACAO)
-  comments         Json?             // Para futuro Markup/Redlining
-  createdAt        DateTime          @default(now())
-  
+  id           Int            @id @default(autoincrement())
+  document     Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId   Int
+  versionLabel String // Ex: R0, R1, A, B
+  filePath     String
+  fileHash     String
+  status       RevisionStatus @default(EM_ELABORACAO)
+  comments     Json? // Para futuro Markup/Redlining
+  createdAt    DateTime       @default(now())
+
   approvalWorkflow ApprovalWorkflow?
 
   // Relação Épico 4
@@ -164,47 +178,42 @@ model ApprovalWorkflow {
   @@index([requesterId])
 }
 
-// --- NOVO MODELO: ÉPICO 4 ---
-
 model Transmittal {
-  id          Int               @id @default(autoincrement())
-  contract    Contract          @relation(fields: [contractId], references: [id])
-  contractId  Int
-  codigo      String            
-  
-  // Novos campos corporativos
-  destinatario String?          @db.VarChar(100) // Para quem vai a GRD
-  proposito    String           @default("PARA_CONHECIMENTO") // Motivo da Emissão
-  
-  assunto     String
-  mensagem    String?           @db.Text
-  
-  status      TransmittalStatus @default(EM_PROCESSAMENTO)
-  
-  zipUrl      String?
-  pdfCapaUrl  String?
+  id         Int      @id @default(autoincrement())
+  contract   Contract @relation(fields: [contractId], references: [id])
+  contractId Int
+  codigo     String
 
-  createdBy   User              @relation("UserCreatedTransmittals", fields: [createdById], references: [id])
+  destinatario String? @db.VarChar(100) // Para quem vai a GRD
+  proposito    String  @default("PARA_CONHECIMENTO") // Motivo da Emissão
+
+  assunto  String
+  mensagem String? @db.Text
+
+  status TransmittalStatus @default(EM_PROCESSAMENTO)
+
+  zipUrl     String?
+  pdfCapaUrl String?
+
+  createdBy   User @relation("UserCreatedTransmittals", fields: [createdById], references: [id])
   createdById Int
 
-  items       TransmittalItem[]
+  items TransmittalItem[]
 
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([contractId, codigo])
   @@index([status])
 }
 
 model TransmittalItem {
-  id             Int         @id @default(autoincrement())
-  transmittal    Transmittal @relation(fields: [transmittalId], references: [id], onDelete: Cascade)
-  transmittalId  Int
-  
-  // Ligamos explicitamente à Revisão (o que foi enviado de facto), não ao Documento abstrato.
-  revision       Revision    @relation(fields: [revisionId], references: [id])
-  revisionId     Int
+  id            Int         @id @default(autoincrement())
+  transmittal   Transmittal @relation(fields: [transmittalId], references: [id], onDelete: Cascade)
+  transmittalId Int
 
-  // Garante que a mesma revisão não é inserida duas vezes no mesmo Transmittal
+  revision   Revision @relation(fields: [revisionId], references: [id])
+  revisionId Int
+
   @@unique([transmittalId, revisionId])
 }

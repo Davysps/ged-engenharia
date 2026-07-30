@@ -1,8 +1,9 @@
-import { Request, Response } from 'express';
-import { Discipline, RevisionStatus, ApprovalStatus } from '@prisma/client';
+import type { Request, Response } from 'express';
+import { Discipline, RevisionStatus, ApprovalStatus, DocumentOcrStatus } from '@prisma/client';
 import { prisma } from '../../prisma';
 import { uploadFileToS3 } from '../../services/s3.service';
-import { AuthRequest } from '../../middlewares/auth.middleware';
+import type { AuthRequest } from '../../middlewares/auth.middleware';
+import { sendToOcrQueue } from '../../services/sqs.service';
 
 export const uploadDocument = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -34,11 +35,11 @@ export const uploadDocument = async (req: AuthRequest, res: Response): Promise<v
             versionLabel: 'R0', 
             filePath: filePath, 
             fileHash: fileHash, 
-            status: RevisionStatus.EM_REVISAO, // <-- Injeção Estrita do Enum
+            status: RevisionStatus.EM_REVISAO, 
             approvalWorkflow: {
               create: {
                 requesterId: userId,
-                status: ApprovalStatus.PENDENTE // <-- Injeção Estrita do Enum
+                status: ApprovalStatus.PENDENTE 
               }
             }
           }
@@ -50,6 +51,16 @@ export const uploadDocument = async (req: AuthRequest, res: Response): Promise<v
         } 
       }
     });
+
+    // INJEÇÃO ÉPICO 5: Disparo de evento assíncrono SQS para OCR
+    try {
+      const firstRevision = newDocument.revisions[0];
+      if (firstRevision) {
+        await sendToOcrQueue(newDocument.id, firstRevision.id, firstRevision.filePath);
+      }
+    } catch (sqsError) {
+      console.error('[GED-OCR] Erro ao enviar documento R0 para a fila SQS:', sqsError);
+    }
 
     res.status(201).json(newDocument);
   } catch (error) {
@@ -114,8 +125,14 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
     const newRevision = await prisma.$transaction(async (tx) => {
       
       await tx.revision.updateMany({
-        where: { documentId, status: { not: RevisionStatus.OBSOLETO } }, // <-- Injeção Estrita
+        where: { documentId, status: { not: RevisionStatus.OBSOLETO } }, 
         data: { status: RevisionStatus.OBSOLETO }
+      });
+
+      // Atualiza o documento pai indicando que o OCR para a nova revisão está pendente
+      await tx.document.update({
+        where: { id: documentId },
+        data: { ocrStatus: DocumentOcrStatus.PENDING }
       });
 
       return await tx.revision.create({
@@ -124,11 +141,11 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
           versionLabel: nextVersionLabel,
           filePath: filePath,
           fileHash: fileHash, 
-          status: RevisionStatus.EM_REVISAO, // <-- Injeção Estrita
+          status: RevisionStatus.EM_REVISAO, 
           approvalWorkflow: {
             create: {
               requesterId: userId,
-              status: ApprovalStatus.PENDENTE // <-- Injeção Estrita
+              status: ApprovalStatus.PENDENTE 
             }
           }
         },
@@ -138,9 +155,47 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
       });
     });
 
+    // INJEÇÃO ÉPICO 5: Disparo de evento assíncrono SQS para OCR na nova revisão
+    try {
+      await sendToOcrQueue(documentId, newRevision.id, newRevision.filePath);
+    } catch (sqsError) {
+      console.error('[GED-OCR] Erro ao enviar nova revisão para a fila SQS:', sqsError);
+    }
+
     res.status(201).json(newRevision);
   } catch (error) {
     console.error('[GED Engenharia] Erro ao processar a nova revisão:', error);
     res.status(500).json({ error: 'Erro interno ao registrar a revisão técnica.' });
+  }
+};
+
+// NOVO ÉPICO 5: Webhook Recebedor do AWS Textract (Python RPA)
+export const updateMetadataWebhook = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { ocrStatus, metadata } = req.body;
+
+  // Proteção rigorosa do Serviço Interno
+  const secret = req.headers['x-internal-secret'];
+  if (secret !== process.env.GED_INTERNAL_SECRET) {
+    res.status(401).json({ error: 'Acesso não autorizado para o serviço interno.' });
+    return;
+  }
+
+  try {
+    const updatedDocument = await prisma.document.update({
+      where: { id: Number(id) },
+      data: {
+        ocrStatus: ocrStatus as DocumentOcrStatus,
+        projectNumber: metadata?.projectNumber,
+        extractedRevision: metadata?.revision,
+        discipline: metadata?.discipline,
+        extractedMetadata: metadata?.rawTextractPayload,
+      },
+    });
+
+    res.status(200).json(updatedDocument);
+  } catch (error) {
+    console.error(`[GED-API] Falha ao atualizar metadados via Webhook (Doc ID: ${id}):`, error);
+    res.status(500).json({ error: 'Erro interno ao atualizar os metadados do OCR.' });
   }
 };

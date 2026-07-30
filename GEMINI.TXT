@@ -1,0 +1,9 @@
+PS D:\xampp\htdocs\ged-engenharia\ged-worker-python> python worker.py
+[GED-WORKER] Listener SQS ativo via Long Polling. A aguardar documentos...
+[GED-OCR] Analisando S3Key: https://ged-engenharia-documentos-prd.s3.us-east-1.amazonaws.com/contratos/ad87905ee88de9d38a233cdcc773f868.pdf (Document ID: 8)
+[GED-OCR] Falha fatal no Doc 8: An error occurred (SubscriptionRequiredException) when calling the AnalyzeDocument operation: The AWS Access Key Id needs a subscription for the service
+
+
+
+[GED-OCR] Falha fatal no Doc 9: An error occurred (SubscriptionRequiredException) when calling the AnalyzeDocument operation: 
+The AWS Access Key Id needs a subscription for the service
