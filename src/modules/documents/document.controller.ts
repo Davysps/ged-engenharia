@@ -4,6 +4,7 @@ import { prisma } from '../../prisma';
 import { uploadFileToS3 } from '../../services/s3.service';
 import type { AuthRequest } from '../../middlewares/auth.middleware';
 import { sendToOcrQueue } from '../../services/sqs.service';
+import { DocumentService } from './document.service';
 
 export const uploadDocument = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -197,5 +198,37 @@ export const updateMetadataWebhook = async (req: Request, res: Response): Promis
   } catch (error) {
     console.error(`[GED-API] Falha ao atualizar metadados via Webhook (Doc ID: ${id}):`, error);
     res.status(500).json({ error: 'Erro interno ao atualizar os metadados do OCR.' });
+  }
+};
+
+// ÉPICO 8: Detalhamento de Documento (Single Source of Truth)
+export const getDocumentById = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId;
+    const documentId = Number(req.params.id);
+
+    if (!userId) {
+      res.status(401).json({ error: 'Usuário não autenticado.' });
+      return;
+    }
+
+    if (isNaN(documentId)) {
+      res.status(400).json({ error: 'ID do documento inválido.' });
+      return;
+    }
+
+    // Delega a query complexa + verificação de RBAC (multi-tenant) para o service
+    const document = await DocumentService.findDocumentById(documentId, userId);
+
+    if (!document) {
+      // Retorna 403 para não vazar a existência do documento a usuários não autorizados
+      res.status(403).json({ error: 'Acesso negado ou documento não encontrado.' });
+      return;
+    }
+
+    res.status(200).json(document);
+  } catch (error) {
+    console.error('[GED Engenharia] Erro ao buscar detalhes do documento:', error);
+    res.status(500).json({ error: 'Erro interno ao buscar os detalhes do documento.' });
   }
 };

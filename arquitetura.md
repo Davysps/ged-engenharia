@@ -58,6 +58,7 @@ Mantemos a divisão estrita baseada em Domain-Driven Design (DDD):
 - **[ÉPICO 3 CONCLUÍDO] Integração do Fluxo de Aprovações:** Entidade `ApprovalWorkflow` atrelada às revisões, painel de aprovações com RBAC e transações atômicas no Prisma.
 - **[ÉPICO 4 CONCLUÍDO] Automação e Transmittals:** Geração de pacotes de guias de remessa e microsserviço Python que cria a "Capa de Lote" em PDF.
 - **[ÉPICO 5 CONCLUÍDO] Extração Inteligente de Metadados (IA / OCR):** Fila SQS, Worker Python com AWS Textract para leitura de carimbos/selos e Webhook interno atualizando status de OCR.
+- **[ÉPICO 8 CONCLUÍDO] Detalhamento de Documentos (Single Source of Truth):** Tela `/documentos/:id` com ficha completa do documento — metadados reais via Prisma, status de extração OCR/RPA, linha do tempo de revisões com histórico de aprovação/rejeição e referências de Transmittals. Tipagem rigorosa no frontend (`import type`, `TransmittalItemDetail`, `RevisionDetail`, asserções de não-nulidade para configurações de status).
 
 ---
 
@@ -72,8 +73,7 @@ Mantemos a divisão estrita baseada em Domain-Driven Design (DDD):
 **ÉPICO 7: Módulo de Planejamento e Coordenação**
 - **Área do Planejamento:** View dedicada com permissões específicas para a equipe de controle. Terão a capacidade de iniciar a subida de "R0s (Planejado)" (placeholders) e extrair relatórios de cronograma vs. realizado.
 
-**ÉPICO 8: Detalhamento de Documentos (Single Source of Truth)**
-- **Interface Específica:** Criação de uma tela/rota para cada documento (ex: `/documentos/:id`) com a ficha completa daquele item: metadados, linha do tempo de todas as revisões, relação de quais Transmittals ele fez parte e log de auditoria.
+> **✅ CONCLUÍDO:** O Épico 8 (Detalhamento de Documentos) foi finalizado. A tela `/documentos/:id` está ativa como "Single Source of Truth" para cada arquivo, com metadados reais, histórico de revisões e status OCR.
 
 **ÉPICO 9: Histórico de Devolutivas (Markups) e Bloqueio de Revisões**
 - **Fluxo de Retrabalho:** Melhoria na justificativa de rejeição. Criar a funcionalidade de registrar comentários detalhados/devolutivas do cliente na Revisão Rejeitada.

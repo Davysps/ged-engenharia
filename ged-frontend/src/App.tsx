@@ -5,6 +5,7 @@ import { LoginForm } from './features/auth/components/LoginForm';
 import { Dashboard } from './features/contracts/components/Dashboard';
 import { ContractLayout } from './features/contracts/components/ContractLayout';
 import { DocumentList } from './features/documents/components/DocumentList';
+import { DocumentDetail } from './features/documents/components/DocumentDetail';
 import { ApprovalDashboard } from './features/documents/components/ApprovalDashboard';
 import { TransmittalDashboard } from './features/transmittals/components/TransmittalDashboard';
 
@@ -61,6 +62,16 @@ function AppRoutes() {
         {/* INJEÇÃO CIRÚRGICA - ÉPICO 4: Guias de Remessa */}
         <Route path="transmittals" element={<TransmittalDashboard />} />
       </Route>
+
+      {/* ÉPICO 8: Detalhamento de Documento (Single Source of Truth) */}
+      <Route 
+        path="/documentos/:id" 
+        element={
+          <PrivateRoute>
+            <DocumentDetail />
+          </PrivateRoute>
+        } 
+      />
 
       {/* Rota de fallback: Qualquer URL não mapeada cai aqui. CORREÇÃO: replace adicionado. */}
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

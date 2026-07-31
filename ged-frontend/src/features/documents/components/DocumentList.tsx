@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/axios'; 
 import { useContract } from '../../../contexts/ContractContext';
 import { FileText, UploadCloud, Eye, History, Clock, CheckCircle, AlertCircle } from 'lucide-react';
@@ -40,6 +41,7 @@ export function DocumentList() {
   const [revDocId, setRevDocId] = useState<number | null>(null);
   const [revDocCodigo, setRevDocCodigo] = useState('');
 
+  const navigate = useNavigate();
   const canUpload = role === 'GESTOR' || role === 'ENGENHEIRO';
 
   const handleViewDocument = (doc: Document, url: string, nome: string) => {
@@ -161,6 +163,14 @@ export function DocumentList() {
                           title="Visualizar Documento e Metadados"
                         >
                           <Eye className="w-5 h-5" />
+                        </button>
+
+                        <button 
+                          onClick={() => navigate(`/documentos/${doc.id}`)}
+                          className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                          title="Ver Detalhes do Documento (Single Source of Truth)"
+                        >
+                          <FileText className="w-5 h-5" />
                         </button>
                         
                         <button className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors" title="Histórico"><History className="w-5 h-5" /></button>
