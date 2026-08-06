@@ -8,6 +8,7 @@ import { DocumentList } from './features/documents/components/DocumentList';
 import { DocumentDetail } from './features/documents/components/DocumentDetail';
 import { ApprovalDashboard } from './features/documents/components/ApprovalDashboard';
 import { TransmittalDashboard } from './features/transmittals/components/TransmittalDashboard';
+import { DashboardOperacional } from './features/dashboard/components/DashboardOperacional';
 
 // 1. Nosso "Guarda de Trânsito": Protege rotas que exigem login
 function PrivateRoute({ children }: { children: ReactNode }) {
@@ -52,7 +53,8 @@ function AppRoutes() {
           </PrivateRoute>
         }
       >
-        <Route index element={<div className="p-6 bg-white rounded-md shadow-sm text-gray-700">Visão Geral do Contrato (Em desenvolvimento)</div>} />
+        {/* Dashboard Operacional substitui o placeholder "Em desenvolvimento" */}
+        <Route index element={<DashboardOperacional />} />
         
         {/* Rota renderizando a nossa nova tabela de documentos */}
         <Route path="documents" element={<DocumentList />} />

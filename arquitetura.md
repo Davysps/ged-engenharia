@@ -46,6 +46,8 @@ Mantemos a divisão estrita baseada em Domain-Driven Design (DDD):
         /projects    -> Domínio de contratos e obras
         /documents   -> Domínio de documentos, revisões e webhooks
         /approvals   -> Domínio do workflow de aprovação
+        /dashboard   -> Domínio do Dashboard Geral de Indicadores Operacionais
+        /transmittals -> Domínio de guias de remessa (GRD)
       - server.ts    -> Ponto de entrada
       - prisma.ts    -> Instância Singleton do ORM
 
@@ -59,6 +61,7 @@ Mantemos a divisão estrita baseada em Domain-Driven Design (DDD):
 - **[ÉPICO 4 CONCLUÍDO] Automação e Transmittals:** Geração de pacotes de guias de remessa e microsserviço Python que cria a "Capa de Lote" em PDF.
 - **[ÉPICO 5 CONCLUÍDO] Extração Inteligente de Metadados (IA / OCR):** Fila SQS, Worker Python com AWS Textract para leitura de carimbos/selos e Webhook interno atualizando status de OCR.
 - **[ÉPICO 8 CONCLUÍDO] Detalhamento de Documentos (Single Source of Truth):** Tela `/documentos/:id` com ficha completa do documento — metadados reais via Prisma, status de extração OCR/RPA, linha do tempo de revisões com histórico de aprovação/rejeição e referências de Transmittals. Tipagem rigorosa no frontend (`import type`, `TransmittalItemDetail`, `RevisionDetail`, asserções de não-nulidade para configurações de status).
+- **[DASHBOARD CONCLUÍDO] Dashboard Geral de Indicadores Operacionais:** Tela de Visão Geral do Contrato (`/contracts/:contractId`) com KPIs consolidados — documentos por disciplina, status de revisões, fila de trabalho (top 5 pendências de aprovação) e histórico recente (últimas 5 GRDs). API backend em `src/modules/dashboard/` com isolamento multi-tenant rigoroso (RBAC via `ContractMembership`). Frontend em `ged-frontend/src/features/dashboard/` com Tailwind v4, tipagem rigorosa (`verbatimModuleSyntax`, `import type`) e tratamento de estados de loading/error.
 
 ---
 
@@ -68,12 +71,14 @@ Mantemos a divisão estrita baseada em Domain-Driven Design (DDD):
 
 **ÉPICO 6: Dashboard Inicial e Gestão de Contratos**
 - **Painel do Gestor:** Interface para o Gerente do Contrato gerenciar a equipe, convidando usuários e atribuindo responsabilidades por disciplina (ex: João aprova Elétrica, Maria aprova Civil).
-- **Dashboard de Entrada:** Tela inicial ao logar apresentando KPIs rápidos (total de documentos pendentes, guias de remessa recentes, aprovações pendentes do usuário logado).
+- **Dashboard de Entrada:** ✅ **CONCLUÍDO** — Tela de Visão Geral do Contrato (`/contracts/:contractId`) apresentando KPIs consolidados: total de documentos por disciplina, contagem de documentos por status de revisão (Aprovado, Em Revisão, Rejeitado, etc.), top 5 pendências de aprovação mais recentes e histórico das 5 últimas Transmittals emitidas. Todos os dados são filtrados obrigatoriamente pelo `contractId` (tenant) com verificação de membro via `ContractMembership`.
 
 **ÉPICO 7: Módulo de Planejamento e Coordenação**
 - **Área do Planejamento:** View dedicada com permissões específicas para a equipe de controle. Terão a capacidade de iniciar a subida de "R0s (Planejado)" (placeholders) e extrair relatórios de cronograma vs. realizado.
 
 > **✅ CONCLUÍDO:** O Épico 8 (Detalhamento de Documentos) foi finalizado. A tela `/documentos/:id` está ativa como "Single Source of Truth" para cada arquivo, com metadados reais, histórico de revisões e status OCR.
+
+> **✅ CONCLUÍDO:** O Dashboard Geral de Indicadores Operacionais foi entregue. A rota `GET /dashboard?contractId=X` retorna KPIs consolidados, status de revisões, fila de trabalho e histórico recente. A tela está integrada como a Visão Geral do Contrato em `/contracts/:contractId`.
 
 **ÉPICO 9: Histórico de Devolutivas (Markups) e Bloqueio de Revisões**
 - **Fluxo de Retrabalho:** Melhoria na justificativa de rejeição. Criar a funcionalidade de registrar comentários detalhados/devolutivas do cliente na Revisão Rejeitada.

@@ -6,6 +6,7 @@ import projectRoutes from './modules/projects/project.routes';
 import documentRoutes from './modules/documents/document.routes'; 
 import approvalRoutes from './modules/approvals/approval.routes';
 import { transmittalRoutes } from './modules/transmittals/transmittal.routes';
+import dashboardRoutes from './modules/dashboard/dashboard.routes';
 
 dotenv.config();
 
@@ -23,6 +24,7 @@ app.use('/projects', projectRoutes);
 app.use('/documents', documentRoutes); 
 app.use('/approvals', approvalRoutes);
 app.use(transmittalRoutes);
+app.use('/dashboard', dashboardRoutes);
 
 const PORT = process.env.PORT || 3000;
 
