@@ -7,6 +7,7 @@ import documentRoutes from './modules/documents/document.routes';
 import approvalRoutes from './modules/approvals/approval.routes';
 import { transmittalRoutes } from './modules/transmittals/transmittal.routes';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
+import managementRoutes from './modules/management/management.routes';
 
 dotenv.config();
 
@@ -25,6 +26,9 @@ app.use('/documents', documentRoutes);
 app.use('/approvals', approvalRoutes);
 app.use(transmittalRoutes);
 app.use('/dashboard', dashboardRoutes);
+
+// Épico 6: Gestão de Usuários e Disciplinas
+app.use('/management', managementRoutes);
 
 const PORT = process.env.PORT || 3000;
 

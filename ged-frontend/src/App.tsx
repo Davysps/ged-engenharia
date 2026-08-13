@@ -9,6 +9,7 @@ import { DocumentDetail } from './features/documents/components/DocumentDetail';
 import { ApprovalDashboard } from './features/documents/components/ApprovalDashboard';
 import { TransmittalDashboard } from './features/transmittals/components/TransmittalDashboard';
 import { DashboardOperacional } from './features/dashboard/components/DashboardOperacional';
+import { ManagementHome } from './features/management/pages/ManagementHome';
 
 // 1. Nosso "Guarda de Trânsito": Protege rotas que exigem login
 function PrivateRoute({ children }: { children: ReactNode }) {
@@ -56,13 +57,16 @@ function AppRoutes() {
         {/* Dashboard Operacional substitui o placeholder "Em desenvolvimento" */}
         <Route index element={<DashboardOperacional />} />
         
-        {/* Rota renderizando a nossa nova tabela de documentos */}
+                {/* Rota renderizando a nossa nova tabela de documentos */}
         <Route path="documents" element={<DocumentList />} />
         
         <Route path="approvals" element={<ApprovalDashboard />} />
         
         {/* INJEÇÃO CIRÚRGICA - ÉPICO 4: Guias de Remessa */}
         <Route path="transmittals" element={<TransmittalDashboard />} />
+
+        {/* ÉPICO 6: Gestão de Usuários e Disciplinas (CRUD + RBAC) */}
+        <Route path="management" element={<ManagementHome />} />
       </Route>
 
       {/* ÉPICO 8: Detalhamento de Documento (Single Source of Truth) */}

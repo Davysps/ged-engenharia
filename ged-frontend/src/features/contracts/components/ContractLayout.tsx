@@ -80,7 +80,7 @@ const ContractLayoutInner: React.FC = () => {
             </Link>
           )}
 
-          {/* INJEÇÃO CIRÚRGICA - ÉPICO 4: Guias de Remessa (Acessível a todos para download) */}
+                  {/* INJEÇÃO CIRÚRGICA - ÉPICO 4: Guias de Remessa (Acessível a todos para download) */}
           <Link
             to={`/contracts/${contract.id}/transmittals`}
             className={`block px-4 py-2.5 rounded-md transition-colors ${
@@ -91,6 +91,20 @@ const ContractLayoutInner: React.FC = () => {
           >
             Guias de Remessa
           </Link>
+
+          {/* ÉPIC 6: Gestão de Usuários e Disciplinas (RBAC: GESTOR) */}
+          {['GESTOR'].includes(role || '') && (
+            <Link
+              to={`/contracts/${contract.id}/management`}
+              className={`block px-4 py-2.5 rounded-md transition-colors ${
+                location.pathname.includes('/management') 
+                  ? 'bg-blue-50 text-blue-700 font-medium' 
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              Gestão de Usuários e Disciplinas
+            </Link>
+          )}
         </nav>
       </aside>
 

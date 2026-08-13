@@ -81,12 +81,28 @@ model Contract {
   descricao   String?
   memberships ContractMembership[]
   documents   Document[]
+  disciplines ContractDiscipline[]
 
   // Relação Épico 4
   transmittals Transmittal[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ÉPICO 6: Gestão de Disciplinas (Multi-Tenant)
+model ContractDiscipline {
+  id          Int      @id @default(autoincrement())
+  contract    Contract @relation(fields: [contractId], references: [id])
+  contractId  Int
+  nome        String
+  codigo      String
+  descricao   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([contractId, codigo])
+  @@index([contractId])
 }
 
 model User {

@@ -65,12 +65,20 @@ Mantemos a divisão estrita baseada em Domain-Driven Design (DDD):
 
 ---
 
+## 🛠️ Dívida Técnica / Refinamento Futuro
+
+### Dashboard Operacional
+- **Refatorar UI para Custom Hooks:** A tela `DashboardOperacional.tsx` ainda realiza chamadas diretas via `dashboardService` dentro de `useEffect`. Recomenda-se extrair a lógica de fetch para um hook customizado (`useDashboard`) para melhorar a reutilização e testabilidade.
+- **Validação Zod no Controller:** O controller do dashboard valida `contractId` manualmente com `parseInt` e `isNaN`. Recomenda-se migrar para schemas Zod validando `body` e `query params` antes de chegar ao Service, garantindo consistência com o novo módulo de Gestão.
+- **Índices Prisma para otimizar agregações:** As queries de agregação (`groupBy`, `findMany` com `include` aninhado) do dashboard não possuem índices compostos otimizados. Recomenda-se adicionar `@@index` em `contractId` e campos de data nas models `Document`, `Revision`, `ApprovalWorkflow` e `Transmittal` para acelerar as consultas de KPIs.
+
 ## 🚀 Próximas Etapas (Roadmap Prioritário)
 
 ### FASE 1: Fundações Operacionais (O Básico Essencial)
 
 **ÉPICO 6: Dashboard Inicial e Gestão de Contratos**
 - **Painel do Gestor:** Interface para o Gerente do Contrato gerenciar a equipe, convidando usuários e atribuindo responsabilidades por disciplina (ex: João aprova Elétrica, Maria aprova Civil).
+- **✅ CONCLUÍDO:** Implementado o módulo `management` com CRUD completo de Disciplinas (`ContractDiscipline`) e gestão de usuários (listagem + convite). Backend em `src/modules/management/` (schemas Zod, service DDD, controller fino, routes protegidas por JWT) e frontend em `src/features/management/` (hooks, components, pages). RBAC: apenas `GESTOR` pode criar/editar/remover disciplinas e convidar usuários; todos os membros podem listar. Multi-tenant: todas as queries filtradas por `contractId` validado via `ContractMembership`.
 - **Dashboard de Entrada:** ✅ **CONCLUÍDO** — Tela de Visão Geral do Contrato (`/contracts/:contractId`) apresentando KPIs consolidados: total de documentos por disciplina, contagem de documentos por status de revisão (Aprovado, Em Revisão, Rejeitado, etc.), top 5 pendências de aprovação mais recentes e histórico das 5 últimas Transmittals emitidas. Todos os dados são filtrados obrigatoriamente pelo `contractId` (tenant) com verificação de membro via `ContractMembership`.
 
 **ÉPICO 7: Módulo de Planejamento e Coordenação**

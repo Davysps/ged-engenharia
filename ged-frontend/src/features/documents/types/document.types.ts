@@ -1,6 +1,6 @@
--0/**
+/**
  * Tipos rigorosos para a tela de Detalhamento de Documentos (Épico 8).
- * 
+ *
  * Todos os imports são `import type` para compatibilidade com
  * verbatimModuleSyntax (exigido pelo tsconfig.app.json do frontend).
  */
