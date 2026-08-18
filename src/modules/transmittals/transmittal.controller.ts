@@ -105,7 +105,9 @@ export class TransmittalController {
           document: { contractId: contractId },
           status: 'APROVADO'
         },
-        include: { document: true },
+        include: {
+          document: { include: { contractDiscipline: true } }
+        },
         orderBy: { createdAt: 'desc' }
       });
 
@@ -114,7 +116,7 @@ export class TransmittalController {
         codigoDocumento: rev.document.codigoDocumento,
         titulo: rev.document.titulo,
         versionLabel: rev.versionLabel,
-        disciplina: rev.document.disciplina
+        disciplina: rev.document.contractDiscipline?.nome ?? 'Não definida'
       }));
 
       const uniqueDocs = new Map();

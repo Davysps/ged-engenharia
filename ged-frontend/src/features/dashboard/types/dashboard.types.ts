@@ -8,14 +8,14 @@
  * (src/modules/dashboard/dashboard.service.ts)
  */
 
-import type { Discipline, TransmittalStatus, ContractRole } from '../../../types/prisma-types';
+import type { TransmittalStatus, ContractRole } from '../../../types/prisma-types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // KPIs Consolidados
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface DocumentByDiscipline {
-  disciplina: Discipline;
+  disciplina: string;
   count: number;
 }
 
@@ -33,7 +33,7 @@ export interface PendingApproval {
   id: number;
   codigoDocumento: string;
   titulo: string;
-  disciplina: Discipline;
+  disciplina: string;
   versionLabel: string;
   solicitante: string;
   dataSolicitacao: string;

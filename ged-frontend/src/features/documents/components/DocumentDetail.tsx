@@ -418,7 +418,17 @@ function MetadataCard({ document }: MetadataCardProps) {
           Disciplina
         </span>
         <span className="inline-block px-3 py-1 bg-slate-100 text-slate-700 text-sm rounded-md font-medium">
-          {document.disciplina}
+          {document.contractDiscipline?.nome ?? 'Não definida'}
+        </span>
+      </div>
+
+      {/* Pacote de Trabalho */}
+      <div>
+        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">
+          Pacote de Trabalho
+        </span>
+        <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-700 text-sm rounded-md font-medium">
+          {document.workPackage?.nome ?? 'Não vinculado'}
         </span>
       </div>
 
@@ -680,7 +690,7 @@ export function DocumentDetail() {
           ocrStatus: document.ocrStatus,
           projectNumber: document.projectNumber,
           extractedRevision: document.extractedRevision,
-          disciplina: document.disciplina,
+          disciplina: document.contractDiscipline?.nome ?? null,
         } : null}
       />
     </div>

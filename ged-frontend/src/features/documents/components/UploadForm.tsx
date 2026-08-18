@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../../../lib/axios';
 import { useContract } from '../../../contexts/ContractContext';
+import { usePlanning } from '../../planning/hooks/usePlanning';
+import { useDisciplines } from '../../management/hooks/useDisciplines';
 import { UploadCloud, FileType, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react';
 
 interface UploadFormProps {
@@ -13,11 +15,24 @@ interface UploadFormProps {
 export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
   // Pegamos o contrato atual direto do contexto! O usuário não precisa mais digitar.
   const { contract } = useContract();
-  
+  const contractId = Number(contract?.id ?? 0);
+
+  // ÉPICO 7.5: Hooks de Planejamento e Disciplinas do Contrato (multi-tenant)
+  const { workPackages, fetchWorkPackages } = usePlanning(contractId);
+  const { disciplines, fetchDisciplines } = useDisciplines(contractId);
+
+  useEffect(() => {
+    if (contractId) {
+      fetchWorkPackages();
+      fetchDisciplines();
+    }
+  }, [contractId, fetchWorkPackages, fetchDisciplines]);
+
   const [file, setFile] = useState<File | null>(null);
   const [codigoDocumento, setCodigoDocumento] = useState('');
   const [titulo, setTitulo] = useState('');
-  const [disciplina, setDisciplina] = useState('CIVIL');
+  const [workPackageId, setWorkPackageId] = useState('');
+  const [contractDisciplineId, setContractDisciplineId] = useState('');
   
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
@@ -39,7 +54,9 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
     formData.append('contractId', contract.id.toString());
     formData.append('codigoDocumento', codigoDocumento);
     formData.append('titulo', titulo);
-    formData.append('disciplina', disciplina);
+    // ÉPICO 7.5: IDs chegam como string via FormData (o backend converte para Int)
+    if (workPackageId) formData.append('workPackageId', workPackageId);
+    if (contractDisciplineId) formData.append('contractDisciplineId', contractDisciplineId);
     formData.append('file', file);
 
     try {
@@ -55,6 +72,8 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
         setFile(null);
         setCodigoDocumento('');
         setTitulo('');
+        setWorkPackageId('');
+        setContractDisciplineId('');
         setStatus('idle');
         if (onSuccess) onSuccess();
         onClose();
@@ -105,18 +124,35 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Disciplina</label>
-            <select 
-              value={disciplina} onChange={(e) => setDisciplina(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 outline-none bg-white"
-            >
-              <option value="CIVIL">Civil</option>
-              <option value="MECANICA">Mecânica</option>
-              <option value="ELETRICA">Elétrica</option>
-              <option value="ESTRUTURAL">Estrutural</option>
-              <option value="ARQUITETURA">Arquitetura</option>
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Disciplina do Contrato</label>
+              <select
+                value={contractDisciplineId} onChange={(e) => setContractDisciplineId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 outline-none bg-white"
+              >
+                <option value="">Sem disciplina</option>
+                {disciplines.map((discipline) => (
+                  <option key={discipline.id} value={discipline.id.toString()}>
+                    {discipline.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Pacote de Trabalho</label>
+              <select
+                value={workPackageId} onChange={(e) => setWorkPackageId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 outline-none bg-white"
+              >
+                <option value="">Sem pacote de trabalho</option>
+                {workPackages.map((workPackage) => (
+                  <option key={workPackage.id} value={workPackage.id.toString()}>
+                    {workPackage.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>

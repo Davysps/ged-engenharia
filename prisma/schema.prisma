@@ -95,14 +95,17 @@ model Contract {
 
 // ÉPICO 6: Gestão de Disciplinas (Multi-Tenant)
 model ContractDiscipline {
-  id          Int      @id @default(autoincrement())
-  contract    Contract @relation(fields: [contractId], references: [id])
-  contractId  Int
-  nome        String
-  codigo      String
-  descricao   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  contract   Contract @relation(fields: [contractId], references: [id])
+  contractId Int
+  nome       String
+  codigo     String
+  descricao  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // ÉPICO 7.5: Documentos vinculados a esta disciplina do contrato
+  documents Document[]
 
   @@unique([contractId, codigo])
   @@index([contractId])
@@ -141,12 +144,11 @@ model ContractMembership {
 }
 
 model Document {
-  id              Int        @id @default(autoincrement())
-  contract        Contract   @relation(fields: [contractId], references: [id])
+  id              Int      @id @default(autoincrement())
+  contract        Contract @relation(fields: [contractId], references: [id])
   contractId      Int
-  codigoDocumento String     @map("codigo_documento")
+  codigoDocumento String   @map("codigo_documento")
   titulo          String
-  disciplina      Discipline
   metadata        Json?
 
   // NOVO: ÉPICO 5 - Extração Inteligente (RPA/OCR)
@@ -154,6 +156,12 @@ model Document {
   projectNumber     String?
   extractedRevision String? // Nomeado para não conflitar com a relação "revisions"
   extractedMetadata Json? // Payload bruto do AWS Textract para auditoria
+
+  // ÉPICO 7.5: Vínculo opcional com Planejamento (Pacotes de Trabalho) e Disciplinas do Contrato
+  workPackageId        Int?
+  workPackage          WorkPackage?        @relation(fields: [workPackageId], references: [id])
+  contractDisciplineId Int?
+  contractDiscipline   ContractDiscipline? @relation(fields: [contractDisciplineId], references: [id])
 
   createdBy   User       @relation("UserCreatedDocuments", fields: [createdById], references: [id])
   createdById Int
@@ -249,6 +257,9 @@ model WorkPackage {
   status     String   @default("PENDENTE")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  // ÉPICO 7.5: Documentos vinculados a este pacote de trabalho
+  documents Document[]
 
   @@index([contractId])
   @@index([status])

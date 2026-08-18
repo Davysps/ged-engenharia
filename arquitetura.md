@@ -84,11 +84,17 @@ Mantemos a divisão estrita baseada em Domain-Driven Design (DDD):
 **ÉPICO 7: Módulo de Planejamento e Coordenação**
 - **Área do Planejamento:** View dedicada com permissões específicas para a equipe de controle. Terão a capacidade de iniciar a subida de "R0s (Planejado)" (placeholders) e extrair relatórios de cronograma vs. realizado.
 
-> **🔄 EM ANDAMENTO (ÉPICO 7 — Fase 2):** O Módulo de Planejamento e Coordenação foi **iniciado**. Primeira entrega: gestão de **Pacotes de Trabalho (`WorkPackage`)** com model Prisma, API em `src/modules/planning/` (Zod + DDD + RBAC GESTOR) e feature frontend em `ged-frontend/src/features/planning/` (Custom Hooks + Tailwind v4), sempre com isolamento multi-tenant por `contractId`.
+> **✅ CONCLUÍDO (ÉPICO 7 — Planejamento + Integração 7.5):** O Módulo de Planejamento e Coordenação foi **finalizado**. Entregas:
+> - **Gestão de Pacotes de Trabalho (`WorkPackage`):** model Prisma, API em `src/modules/planning/` (Zod + DDD + RBAC GESTOR) e feature frontend em `ged-frontend/src/features/planning/` (Custom Hooks `usePlanning` + Tailwind v4), sempre com isolamento multi-tenant por `contractId`.
+> - **Integração com Documentos (Épico 7.5):** o model `Document` ganhou vínculos opcionais `workPackageId` e `contractDisciplineId` (FKs para `WorkPackage` e `ContractDiscipline`). O backend de upload (`document.controller.ts`) converte estes IDs (strings do FormData → Int) e os persiste no `prisma.document.create()`. O formulário de upload (`ged-frontend/src/features/documents/components/UploadForm.tsx`) agora consome `usePlanning(contractId)` e `useDisciplines(contractId)` e permite vincular o documento à Disciplina do Contrato e ao Pacote de Trabalho ao submeter o R0. **ÉPICO 8 (Refinamento Visual e Limpeza Arquitetural):** o campo legado `disciplina` (enum) foi **removido** do model `Document` — o vínculo depende agora exclusivamente de `contractDisciplineId` e `workPackageId` (backend, seed e frontend atualizados).
 
 > **✅ CONCLUÍDO:** O Épico 8 (Detalhamento de Documentos) foi finalizado. A tela `/documentos/:id` está ativa como "Single Source of Truth" para cada arquivo, com metadados reais, histórico de revisões e status OCR.
 
 > **✅ CONCLUÍDO:** O Dashboard Geral de Indicadores Operacionais foi entregue. A rota `GET /dashboard?contractId=X` retorna KPIs consolidados, status de revisões, fila de trabalho e histórico recente. A tela está integrada como a Visão Geral do Contrato em `/contracts/:contractId`.
+
+**ÉPICO 8: Refinamento Visual e Limpeza Arquitetural**
+- **🔄 INICIADO (Épico 8) — Busca Avançada e Limpeza:** Remoção do campo legado `disciplina` (enum) do model `Document` (o vínculo passa a depender exclusivamente de `contractDisciplineId` e `workPackageId`), limpeza do backend (schemas Zod, controller e service) e busca avançada nos filtros de listagem (`busca`, `disciplinaId`, `pacoteId`). Frontend com Toolbar de Busca Avançada em `DocumentList.tsx` e remoção do input legado em `UploadForm.tsx`.
+- **🔄 INICIADO (Épico 8) — Redesign: Menu Superior (Topbar):** Substituição do layout de Sidebar (Barra Lateral) por uma Top Navigation Bar moderna em `ContractLayout.tsx` (Tailwind v4), com o nome do contrato atual e links horizontais (Dashboard, Documentos, Transmittals, Planejamento, Gestão).
 
 **ÉPICO 9: Histórico de Devolutivas (Markups) e Bloqueio de Revisões**
 - **Fluxo de Retrabalho:** Melhoria na justificativa de rejeição. Criar a funcionalidade de registrar comentários detalhados/devolutivas do cliente na Revisão Rejeitada.
@@ -102,6 +108,7 @@ Mantemos a divisão estrita baseada em Domain-Driven Design (DDD):
 - **Notificações In-App/Email:** Alertas de fluxos e GRDs (novas aprovações, revisões rejeitadas, transmittals emitidos) entregues no sino do Frontend e/ou por e-mail aos membros do contrato.
 - **Exportação de MDR — Master Document Register (Excel/CSV):** Exportação do registro mestre de documentos do contrato em planilha, respeitando o isolamento multi-tenant por `contractId`.
 - **Busca Avançada e Filtros Refinados:** Busca por código/título/disciplina/status com filtros combináveis nas listagens de documentos, revisões e GRDs.
+- **🔄 INICIADO (Épico 8):** Busca Avançada e Limpeza (filtros `busca`, `disciplinaId`, `pacoteId` em documentos) e Redesign: Menu Superior (Topbar) — ver seção Épico 8 na Fase 1.
 
 ### FASE 2: Inovações para TOP 1 de Mercado (Pós-Fundações)
 

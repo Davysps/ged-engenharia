@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { prisma } from '../../prisma';
-import { AuthRequest } from '../../middlewares/auth.middleware'; 
+import { AuthRequest } from '../../middlewares/auth.middleware';
+import { listDocuments } from '../documents/document.controller';
 
 export const getProjects = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -80,35 +81,5 @@ export const getProjectById = async (req: AuthRequest, res: Response): Promise<v
   }
 };
 
-// NOVA FUNÇÃO: Busca os documentos reais de um contrato
-export const getProjectDocuments = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const projectId = parseInt(req.params.id as string, 10);
-    const userId = req.userId;
-
-    if (!userId) {
-      res.status(401).json({ error: 'Usuário não autenticado.' });
-      return;
-    }
-
-    if (isNaN(projectId)) {
-      res.status(400).json({ error: 'ID do projeto inválido.' });
-      return;
-    }
-
-    // Busca os documentos e suas respectivas revisões ordenadas cronologicamente
-    const documents = await prisma.document.findMany({
-      where: { contractId: projectId },
-      include: {
-        revisions: {
-          orderBy: { createdAt: 'asc' } // Garante que a R0, R1 venham na ordem certa
-        }
-      }
-    });
-
-    res.status(200).json(documents);
-  } catch (error) {
-    console.error('[GED Engenharia] Erro ao buscar documentos:', error);
-    res.status(500).json({ error: 'Erro ao buscar documentos da obra.' });
-  }
-};
+// Delegado ao DocumentService (ÉPICO 8): listagem com Busca Avançada e RBAC multi-tenant
+export const getProjectDocuments = listDocuments;

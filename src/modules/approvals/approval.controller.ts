@@ -36,7 +36,11 @@ export const getPendingApprovals = async (req: AuthRequest, res: Response): Prom
       },
       include: {
         revision: {
-          include: { document: true }
+          include: {
+            document: {
+              include: { contractDiscipline: true }
+            }
+          }
         },
         requester: {
           select: { nome: true }
@@ -49,7 +53,7 @@ export const getPendingApprovals = async (req: AuthRequest, res: Response): Prom
       id: p.id,
       codigoDocumento: p.revision.document.codigoDocumento,
       revisao: p.revision.versionLabel,
-      disciplina: p.revision.document.disciplina,
+      disciplina: p.revision.document.contractDiscipline?.nome ?? 'Não definida',
       solicitante: p.requester?.nome || 'Sistema',
       dataSolicitacao: p.requestedAt.toISOString()
     }));

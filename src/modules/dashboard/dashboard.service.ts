@@ -42,13 +42,28 @@ export class DashboardService {
 
     // ── 2. KPIs CONSOLIDADOS: Total de documentos agrupados por disciplina ─
     const documentsByDisciplineRaw = await prisma.document.groupBy({
-      by: ['disciplina'],
+      by: ['contractDisciplineId'],
       where: { contractId },
       _count: { _all: true },
     });
 
+    const disciplineIds = documentsByDisciplineRaw
+      .map((item) => item.contractDisciplineId)
+      .filter((id): id is number => id !== null);
+
+    const disciplineNameById = new Map<number, string>();
+    if (disciplineIds.length > 0) {
+      const disciplines = await prisma.contractDiscipline.findMany({
+        where: { id: { in: disciplineIds } },
+        select: { id: true, nome: true },
+      });
+      for (const d of disciplines) disciplineNameById.set(d.id, d.nome);
+    }
+
     const documentsByDiscipline = documentsByDisciplineRaw.map((item) => ({
-      disciplina: item.disciplina,
+      disciplina: item.contractDisciplineId
+        ? (disciplineNameById.get(item.contractDisciplineId) ?? 'Não definida')
+        : 'Não definida',
       count: item._count._all,
     }));
 
@@ -99,7 +114,7 @@ export class DashboardService {
                 id: true,
                 codigoDocumento: true,
                 titulo: true,
-                disciplina: true,
+                contractDiscipline: { select: { nome: true } },
               },
             },
           },
@@ -111,7 +126,7 @@ export class DashboardService {
       id: p.id,
       codigoDocumento: p.revision.document.codigoDocumento,
       titulo: p.revision.document.titulo,
-      disciplina: p.revision.document.disciplina,
+      disciplina: p.revision.document.contractDiscipline?.nome ?? 'Não definida',
       versionLabel: p.revision.versionLabel,
       solicitante: p.requester?.nome ?? 'Sistema',
       dataSolicitacao: p.requestedAt.toISOString(),

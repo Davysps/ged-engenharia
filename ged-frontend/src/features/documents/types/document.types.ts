@@ -5,7 +5,7 @@
  * verbatimModuleSyntax (exigido pelo tsconfig.app.json do frontend).
  */
 
-import type { Discipline, RevisionStatus, ApprovalStatus, DocumentOcrStatus, TransmittalStatus, ContractRole } from '../../../types/prisma-types';
+import type { RevisionStatus, ApprovalStatus, DocumentOcrStatus, TransmittalStatus, ContractRole } from '../../../types/prisma-types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos Auxiliares
@@ -27,6 +27,18 @@ export interface ContractInfo {
   codigo: string;
   nome: string;
   client: ClientInfo;
+}
+
+// ÉPICO 8: Referências das relações do documento (Disciplina e Pacote de Trabalho)
+export interface ContractDisciplineRef {
+  id: number;
+  nome: string;
+  codigo: string;
+}
+
+export interface WorkPackageRef {
+  id: number;
+  nome: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -85,7 +97,8 @@ export interface DocumentDetail {
   id: number;
   codigoDocumento: string;
   titulo: string;
-  disciplina: Discipline;
+  contractDiscipline: ContractDisciplineRef | null;
+  workPackage: WorkPackageRef | null;
   metadata: Record<string, unknown> | null;
   ocrStatus: DocumentOcrStatus;
   projectNumber: string | null;

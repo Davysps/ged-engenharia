@@ -1,16 +1,23 @@
 import type { Request, Response } from 'express';
-import { Discipline, RevisionStatus, ApprovalStatus, DocumentOcrStatus } from '@prisma/client';
+import { RevisionStatus, ApprovalStatus, DocumentOcrStatus } from '@prisma/client';
 import { prisma } from '../../prisma';
 import { uploadFileToS3 } from '../../services/s3.service';
 import type { AuthRequest } from '../../middlewares/auth.middleware';
 import { sendToOcrQueue } from '../../services/sqs.service';
 import { DocumentService } from './document.service';
+import { uploadDocumentSchema, documentListQuerySchema } from './document.schemas';
 
 export const uploadDocument = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { contractId, codigoDocumento, titulo, disciplina } = req.body;
+    const parsed = uploadDocumentSchema.parse(req.body);
+    const { contractId, codigoDocumento, titulo } = parsed;
     const file = req.file;
-    const userId = req.userId; 
+    const userId = req.userId;
+
+    // ÉPICO 7.5: Vínculos opcionais de Planejamento e Disciplina do Contrato
+    // Prisma (exactOptionalPropertyTypes) exige null — e não undefined — para FKs opcionais não preenchidas
+    const workPackageId = parsed.workPackageId ?? null;
+    const contractDisciplineId = parsed.contractDisciplineId ?? null;
 
     if (!userId) {
       res.status(401).json({ error: 'Usuário não autenticado.' });
@@ -26,10 +33,11 @@ export const uploadDocument = async (req: AuthRequest, res: Response): Promise<v
 
     const newDocument = await prisma.document.create({
       data: {
-        contractId: Number(contractId),
+        contractId,
         codigoDocumento,
         titulo,
-        disciplina: disciplina as Discipline,
+        workPackageId,
+        contractDisciplineId,
         createdById: userId,
         revisions: {
           create: {
@@ -64,7 +72,11 @@ export const uploadDocument = async (req: AuthRequest, res: Response): Promise<v
     }
 
     res.status(201).json(newDocument);
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === 'ZodError') {
+      res.status(400).json({ error: error.issues?.map((i: any) => i.message).join('; ') || 'Payload inválido.' });
+      return;
+    }
     console.error('[GED Engenharia] Erro a processar o upload do documento:', error);
     res.status(500).json({ error: 'Erro interno ao arquivar o ficheiro técnico.' });
   }
@@ -189,7 +201,6 @@ export const updateMetadataWebhook = async (req: Request, res: Response): Promis
         ocrStatus: ocrStatus as DocumentOcrStatus,
         projectNumber: metadata?.projectNumber,
         extractedRevision: metadata?.revision,
-        discipline: metadata?.discipline,
         extractedMetadata: metadata?.rawTextractPayload,
       },
     });
@@ -198,6 +209,43 @@ export const updateMetadataWebhook = async (req: Request, res: Response): Promis
   } catch (error) {
     console.error(`[GED-API] Falha ao atualizar metadados via Webhook (Doc ID: ${id}):`, error);
     res.status(500).json({ error: 'Erro interno ao atualizar os metadados do OCR.' });
+  }
+};
+
+// ÉPICO 8: Listagem de documentos do contrato com Busca Avançada (filtros combináveis)
+export const listDocuments = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId;
+    const contractId = Number(req.params.id);
+
+    if (!userId) {
+      res.status(401).json({ error: 'Usuário não autenticado.' });
+      return;
+    }
+
+    if (isNaN(contractId)) {
+      res.status(400).json({ error: 'ID do contrato inválido.' });
+      return;
+    }
+
+    // Validação Zod dos query params de busca avançada (busca, disciplinaId, pacoteId)
+    const filters = documentListQuerySchema.parse(req.query);
+
+    // Delega a query + verificação de RBAC (multi-tenant) para o service
+    const documents = await DocumentService.listDocuments(contractId, userId, filters);
+
+    res.status(200).json(documents);
+  } catch (error: any) {
+    if (error?.name === 'ZodError') {
+      res.status(400).json({ error: error.issues?.map((i: any) => i.message).join('; ') || 'Query params inválidos.' });
+      return;
+    }
+    if (error?.code === 'ACCESS_DENIED') {
+      res.status(403).json({ error: 'Acesso negado a este contrato.' });
+      return;
+    }
+    console.error('[GED Engenharia] Erro ao listar documentos:', error);
+    res.status(500).json({ error: 'Erro interno ao listar os documentos.' });
   }
 };
 

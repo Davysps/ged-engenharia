@@ -42,22 +42,41 @@ async function main() {
     ]
   });
 
-  // 5. Criar um Documento com Revisão 0 (R0)
+  // 5. Criar Disciplina e Pacote de Trabalho (Épico 6/7) e Documento com Revisão 0 (R0)
+  const disciplina = await prisma.contractDiscipline.create({
+    data: {
+      contractId: contract.id,
+      nome: 'Civil',
+      codigo: 'CIV',
+      descricao: 'Disciplina de engenharia civil e estrutural.'
+    }
+  });
+
+  const pacote = await prisma.workPackage.create({
+    data: {
+      contractId: contract.id,
+      nome: 'Galpão Principal',
+      descricao: 'Pacote de obras do galpão principal.',
+      dataInicio: new Date(),
+      dataFim: new Date(new Date().setMonth(new Date().getMonth() + 6)),
+      status: 'EM_ANDAMENTO'
+    }
+  });
+
   const doc = await prisma.document.create({
     data: {
       contractId: contract.id,
       codigoDocumento: 'VALE-CIV-PLA-001',
       titulo: 'Planta Baixa - Galpão Principal',
-      disciplina: 'CIVIL',
+      contractDisciplineId: disciplina.id,
+      workPackageId: pacote.id,
       createdById: engenheiro.id,
       revisions: {
         create: {
           versionLabel: 'R0',
           filePath: 'uploads/GED-mock-file.pdf',
           fileHash: 'mock-hash-1234',
-          status: 'APROVADO',
-          approvedById: gestor.id,
-          approvedAt: new Date()
+          status: 'APROVADO'
         }
       }
     }
