@@ -10,6 +10,7 @@ import { ApprovalDashboard } from './features/documents/components/ApprovalDashb
 import { TransmittalDashboard } from './features/transmittals/components/TransmittalDashboard';
 import { DashboardOperacional } from './features/dashboard/components/DashboardOperacional';
 import { ManagementHome } from './features/management/pages/ManagementHome';
+import { PlanningHome } from './features/planning/pages/PlanningHome';
 
 // 1. Nosso "Guarda de Trânsito": Protege rotas que exigem login
 function PrivateRoute({ children }: { children: ReactNode }) {
@@ -67,6 +68,9 @@ function AppRoutes() {
 
         {/* ÉPICO 6: Gestão de Usuários e Disciplinas (CRUD + RBAC) */}
         <Route path="management" element={<ManagementHome />} />
+
+        {/* ÉPICO 7: Módulo de Planejamento e Coordenação */}
+        <Route path="planning" element={<PlanningHome />} />
       </Route>
 
       {/* ÉPICO 8: Detalhamento de Documento (Single Source of Truth) */}

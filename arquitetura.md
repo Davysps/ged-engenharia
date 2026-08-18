@@ -84,6 +84,8 @@ Mantemos a divisão estrita baseada em Domain-Driven Design (DDD):
 **ÉPICO 7: Módulo de Planejamento e Coordenação**
 - **Área do Planejamento:** View dedicada com permissões específicas para a equipe de controle. Terão a capacidade de iniciar a subida de "R0s (Planejado)" (placeholders) e extrair relatórios de cronograma vs. realizado.
 
+> **🔄 EM ANDAMENTO (ÉPICO 7 — Fase 2):** O Módulo de Planejamento e Coordenação foi **iniciado**. Primeira entrega: gestão de **Pacotes de Trabalho (`WorkPackage`)** com model Prisma, API em `src/modules/planning/` (Zod + DDD + RBAC GESTOR) e feature frontend em `ged-frontend/src/features/planning/` (Custom Hooks + Tailwind v4), sempre com isolamento multi-tenant por `contractId`.
+
 > **✅ CONCLUÍDO:** O Épico 8 (Detalhamento de Documentos) foi finalizado. A tela `/documentos/:id` está ativa como "Single Source of Truth" para cada arquivo, com metadados reais, histórico de revisões e status OCR.
 
 > **✅ CONCLUÍDO:** O Dashboard Geral de Indicadores Operacionais foi entregue. A rota `GET /dashboard?contractId=X` retorna KPIs consolidados, status de revisões, fila de trabalho e histórico recente. A tela está integrada como a Visão Geral do Contrato em `/contracts/:contractId`.
@@ -94,6 +96,12 @@ Mantemos a divisão estrita baseada em Domain-Driven Design (DDD):
 
 **ÉPICO 10: Sistema de Notificações Internas**
 - **Comunicação:** Entidade no banco para registrar alertas (ex: "Você tem 5 novos documentos aguardando aprovação") visíveis no sino (bell icon) do menu superior do Frontend.
+
+**🔒 PENDENTES PARA FECHAR A FASE 1 (Excelência B2B):**
+- **Trilha de Auditoria:** Logs de eventos críticos (criação/edição/exclusão de documentos, revisões, aprovações, GRDs e Work Packages) persistidos com `userId`, `contractId`, timestamp e payload, garantindo rastreabilidade completa exigida pelo mercado corporativo.
+- **Notificações In-App/Email:** Alertas de fluxos e GRDs (novas aprovações, revisões rejeitadas, transmittals emitidos) entregues no sino do Frontend e/ou por e-mail aos membros do contrato.
+- **Exportação de MDR — Master Document Register (Excel/CSV):** Exportação do registro mestre de documentos do contrato em planilha, respeitando o isolamento multi-tenant por `contractId`.
+- **Busca Avançada e Filtros Refinados:** Busca por código/título/disciplina/status com filtros combináveis nas listagens de documentos, revisões e GRDs.
 
 ### FASE 2: Inovações para TOP 1 de Mercado (Pós-Fundações)
 

@@ -8,6 +8,7 @@ import approvalRoutes from './modules/approvals/approval.routes';
 import { transmittalRoutes } from './modules/transmittals/transmittal.routes';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import managementRoutes from './modules/management/management.routes';
+import planningRoutes from './modules/planning/planning.routes';
 
 dotenv.config();
 
@@ -29,6 +30,9 @@ app.use('/dashboard', dashboardRoutes);
 
 // Épico 6: Gestão de Usuários e Disciplinas
 app.use('/management', managementRoutes);
+
+// Épico 7: Módulo de Planejamento e Coordenação (Pacotes de Trabalho)
+app.use('/planning', planningRoutes);
 
 const PORT = process.env.PORT || 3000;
 

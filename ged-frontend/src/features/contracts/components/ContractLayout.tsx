@@ -105,6 +105,18 @@ const ContractLayoutInner: React.FC = () => {
               Gestão de Usuários e Disciplinas
             </Link>
           )}
+
+          {/* ÉPICO 7: Planejamento e Coordenação (acesso a todos os membros) */}
+          <Link
+            to={`/contracts/${contract.id}/planning`}
+            className={`block px-4 py-2.5 rounded-md transition-colors ${
+              location.pathname.includes('/planning') 
+                ? 'bg-blue-50 text-blue-700 font-medium' 
+                : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            Planejamento e Coordenação
+          </Link>
         </nav>
       </aside>
 
