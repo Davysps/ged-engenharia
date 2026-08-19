@@ -66,6 +66,7 @@ Divisão estrita baseada em Domain-Driven Design (DDD):
 - **[ÉPICO 7] Planejamento e Coordenação:** Gestão de `WorkPackage`, integração com Upload (`contractDisciplineId` e `workPackageId`). O campo legado `disciplina` (enum) foi removido com sucesso.
 - **[ÉPICO 8] Detalhamento:** Tela `/documentos/:id` como Single Source of Truth com timeline de revisões e histórico.
 - **[ÉPICO 8] Refinamento Visual e UI/UX (Concluído):** Identidade visual própria na Topbar (marca "GED Engenharia" + ícone de Nuvem), Top Navigation Bar substituindo a Sidebar, nomes/códigos de documentos clicáveis (atalho principal para o detalhamento via `/contracts/:contractId/documents/:documentId`) e Modal de "Histórico de Versões" com acesso rápido ao clicar no ícone de Relógio na listagem.
+- **[ÉPICO 9] Estruturação Hierárquica e Apontamento de Horas (INICIADO — Fase 1):** Modelos `Project`, `TimeLog` e `DocumentLink` criados no Prisma; `Contract` ganhou `projectId` opcional (retrocompatibilidade). Backend: módulo `timesheets` (CRUD de horas com `userId` do JWT + isolamento multi-tenant por membership do contrato) e `GET /projects` agora devolve a árvore completa `Clientes > Projetos > Contratos`. Frontend: seção "Apontamento de Horas" no detalhamento do documento (`TimesheetForm`, `TimesheetList`, `useTimesheet`) e Dashboard agrupado por Cliente/Projeto.
 - **[DASHBOARD]** KPI consolidados (documentos por disciplina, status, pendências, últimas GRDs).
 
 ---
@@ -82,7 +83,7 @@ Divisão estrita baseada em Domain-Driven Design (DDD):
 
 ### FASE 1: Fundações Operacionais e UX Refinada
 
-**ÉPICO 9: Estruturação Hierárquica e Apontamento de Horas**
+**ÉPICO 9: Estruturação Hierárquica e Apontamento de Horas** _(🟡 INICIADO — Fase 1)_
 - **Hierarquia Real:** Implementar navegação de pastas/estruturas agrupando Cliente > Projetos > Contrato.
 - **Controle de Horas (Timesheet):** Permitir lançamento de horas trabalhadas por documento para extração de relatórios analíticos pela equipe de Planejamento.
 - **Relacionamentos (Anexos):** Possibilidade de criar vínculos entre documentos (ex: PDF atrelado a uma GRD ou a um modelo 3D).

@@ -1,7 +1,102 @@
 import { Response } from 'express';
 import { prisma } from '../../prisma';
-import { AuthRequest } from '../../middlewares/auth.middleware';
+import type { ContractMembership } from '@prisma/client';
+import type { AuthRequest } from '../../middlewares/auth.middleware';
 import { listDocuments } from '../documents/document.controller';
+
+/**
+ * Estruturas da Árvore Hierárquica (ÉPICO 9):
+ * Clientes > Projetos > Contratos.
+ */
+
+interface ContractTreeNode {
+  id: number;
+  codigo: string;
+  nome: string;
+  descricao: string | null;
+  role: string | null;
+}
+
+interface ProjectTreeNode {
+  id: number | null;
+  nome: string;
+  contracts: ContractTreeNode[];
+}
+
+interface ClientTreeNode {
+  id: number;
+  nome: string;
+  cnpj: string | null;
+  projects: ProjectTreeNode[];
+}
+
+type MembershipWithHierarchy = ContractMembership & {
+  contract: {
+    id: number;
+    codigo: string;
+    nome: string;
+    descricao: string | null;
+    clientId: number;
+    projectId: number | null;
+    client: { id: number; nome: string; cnpj: string | null };
+    project: { id: number; nome: string } | null;
+  };
+};
+
+/**
+ * Monta a árvore Cliente > Projeto > Contrato a partir das memberships do
+ * usuário logado. Contratos legados (sem `projectId`) são agrupados sob um
+ * projeto virtual "Sem Projeto", preservando a retrocompatibilidade.
+ */
+function buildHierarchyTree(memberships: MembershipWithHierarchy[]): ClientTreeNode[] {
+  const clientsMap = new Map<
+    number,
+    ClientTreeNode & { projectsMap: Map<string, ProjectTreeNode> }
+  >();
+
+  for (const membership of memberships) {
+    const contract = membership.contract;
+    const client = contract.client;
+
+    let clientNode = clientsMap.get(client.id);
+    if (!clientNode) {
+      clientNode = {
+        id: client.id,
+        nome: client.nome,
+        cnpj: client.cnpj,
+        projects: [],
+        projectsMap: new Map(),
+      };
+      clientsMap.set(client.id, clientNode);
+    }
+
+    const projectKey = contract.projectId ? String(contract.projectId) : 'legacy';
+    let projectNode = clientNode.projectsMap.get(projectKey);
+    if (!projectNode) {
+      projectNode = {
+        id: contract.project?.id ?? null,
+        nome: contract.project?.nome ?? 'Sem Projeto',
+        contracts: [],
+      };
+      clientNode.projectsMap.set(projectKey, projectNode);
+    }
+
+    projectNode.contracts.push({
+      id: contract.id,
+      codigo: contract.codigo,
+      nome: contract.nome,
+      descricao: contract.descricao,
+      role: membership.role,
+    });
+  }
+
+  return Array.from(clientsMap.values()).map((clientNode) => ({
+    id: clientNode.id,
+    nome: clientNode.nome,
+    cnpj: clientNode.cnpj,
+    projects: Array.from(clientNode.projectsMap.values()),
+  }));
+}
 
 export const getProjects = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -12,26 +107,24 @@ export const getProjects = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const contratos = await prisma.contract.findMany({
-      where: {
-        memberships: {
-          some: {
-            userId: userId
-          }
-        }
-      },
+    // ISOLAMENTO MULTI-TENANT: apenas contratos onde o usuário é membro
+    const memberships = await prisma.contractMembership.findMany({
+      where: { userId },
       include: {
-        client: true,
-        memberships: {
-          where: { userId: userId },
-          select: { role: true }
-        }
-      }
+        contract: {
+          include: {
+            client: true,
+            project: true,
+          },
+        },
+      },
+      orderBy: { contract: { nome: 'asc' } },
     });
-    
-    res.status(200).json(contratos);
+
+    // Árvore hierárquica completa: Clientes > Projetos > Contratos
+    res.status(200).json(buildHierarchyTree(memberships as MembershipWithHierarchy[]));
   } catch (error) {
-    console.error('[GED Engenharia] Erro ao buscar contratos:', error);
+    console.error('[GED Engenharia] Erro ao buscar a hierarquia de contratos:', error);
     res.status(500).json({ error: 'Erro interno do servidor ao acessar os contratos.' });
   }
 };
@@ -61,9 +154,9 @@ export const getProjectById = async (req: AuthRequest, res: Response): Promise<v
         }
       },
       include: {
-        client: true, 
+        client: true,
         memberships: {
-          where: { userId: userId }, 
+          where: { userId: userId },
           select: { role: true }
         }
       }

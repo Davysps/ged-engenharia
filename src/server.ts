@@ -9,6 +9,7 @@ import { transmittalRoutes } from './modules/transmittals/transmittal.routes';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import managementRoutes from './modules/management/management.routes';
 import planningRoutes from './modules/planning/planning.routes';
+import timesheetRoutes from './modules/timesheets/timesheet.routes';
 
 dotenv.config();
 
@@ -33,6 +34,9 @@ app.use('/management', managementRoutes);
 
 // Épico 7: Módulo de Planejamento e Coordenação (Pacotes de Trabalho)
 app.use('/planning', planningRoutes);
+
+// Épico 9: Módulo de Apontamento de Horas (Timesheet)
+app.use('/timesheets', timesheetRoutes);
 
 const PORT = process.env.PORT || 3000;
 

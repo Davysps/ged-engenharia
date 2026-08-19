@@ -5,6 +5,9 @@ import { documentService } from '../services/document.service';
 import type { DocumentDetail, RevisionDetail, TransmittalItemDetail } from '../types/document.types';
 import { DocumentViewer } from './DocumentViewer';
 import { RevisionUploadForm } from './RevisionUploadForm';
+import { TimesheetForm } from './TimesheetForm';
+import { TimesheetList } from './TimesheetList';
+import { useTimesheet } from '../hooks/useTimesheet';
 import {
   ChevronLeft,
   FileText,
@@ -27,6 +30,8 @@ import {
   FileCode,
   Building2,
   History,
+  Hourglass,
+  PlusCircle,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -527,6 +532,9 @@ export function DocumentDetail() {
   const documentId = Number(rawId);
   const canUpload = document?.userRole === 'GESTOR' || document?.userRole === 'ENGENHEIRO';
 
+  // ÉPICO 9: Estado dos Apontamentos de Horas deste documento
+  const timesheet = useTimesheet(documentId);
+
   const fetchDocument = async () => {
     if (!rawId || isNaN(documentId)) {
       setError('ID do documento inválido.');
@@ -553,6 +561,11 @@ export function DocumentDetail() {
   useEffect(() => {
     fetchDocument();
   }, [rawId]);
+
+  // ÉPICO 9: Carrega o histórico de horas assim que o documento é aberto
+  useEffect(() => {
+    timesheet.fetchTimeLogs();
+  }, [timesheet.fetchTimeLogs]);
 
   const handlePreview = (revision: RevisionDetail) => {
     setSelectedFileUrl(revision.filePath);
@@ -677,6 +690,41 @@ export function DocumentDetail() {
                 onUploadSuccess={fetchDocument}
               />
             ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ÉPICO 9: Apontamento de Horas (Timesheet) */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center gap-2 mb-5 pb-4 border-b border-gray-100">
+          <Hourglass className="w-5 h-5 text-blue-600" />
+          <h2 className="text-xl font-bold text-gray-800">Apontamento de Horas</h2>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <PlusCircle className="w-4 h-4 text-blue-600" />
+              Lançar Horas
+            </h3>
+            <TimesheetForm
+              onSubmit={timesheet.createTimeLog}
+              onSuccess={timesheet.fetchTimeLogs}
+              isSubmitting={timesheet.isSubmitting}
+              error={timesheet.error}
+            />
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-indigo-600" />
+              Histórico de Horas
+            </h3>
+            <TimesheetList
+              timeLogs={timesheet.timeLogs}
+              isLoading={timesheet.isLoading}
+              onDelete={timesheet.deleteTimeLog}
+            />
           </div>
         </div>
       </div>
