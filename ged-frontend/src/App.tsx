@@ -60,6 +60,9 @@ function AppRoutes() {
         
                 {/* Rota renderizando a nossa nova tabela de documentos */}
         <Route path="documents" element={<DocumentList />} />
+
+        {/* ÉPICO 8: Detalhamento aninhado dentro do contrato (atalho de nomes clicáveis) */}
+        <Route path="documents/:documentId" element={<DocumentDetail />} />
         
         <Route path="approvals" element={<ApprovalDashboard />} />
         

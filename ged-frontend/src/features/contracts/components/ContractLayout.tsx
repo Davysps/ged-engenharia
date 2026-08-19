@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   ArrowLeft,
   HardHat,
+  Cloud,
 } from 'lucide-react';
 
 // 1. Componente interno que consome o contexto e constrói a UI (Top Navigation Bar)
@@ -90,6 +91,21 @@ const ContractLayoutInner: React.FC = () => {
       <header className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-gray-200 shadow-sm">
         <div className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-4 h-16">
+            {/* Identidade da Marca (ÉPICO 8: Refinamento Visual) */}
+            <div className="flex items-center gap-3 shrink-0 pr-4 border-r border-gray-200 mr-4">
+              <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-blue-700 text-white shadow-md shadow-blue-200 shrink-0">
+                <Cloud className="w-5.5 h-5.5" />
+              </span>
+              <div className="leading-tight">
+                <span className="block text-base font-extrabold tracking-tight text-gray-900">
+                  GED <span className="text-blue-600">Engenharia</span>
+                </span>
+                <span className="block text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+                  Plataforma SaaS B2B
+                </span>
+              </div>
+            </div>
+
             {/* Identidade do Contrato */}
             <div className="flex items-center gap-3 min-w-0">
               <Link

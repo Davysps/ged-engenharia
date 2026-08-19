@@ -512,7 +512,7 @@ function MetadataCard({ document }: MetadataCardProps) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function DocumentDetail() {
-  const { id } = useParams<{ id: string }>();
+  const { id, documentId: routeDocumentId } = useParams<{ id?: string; documentId?: string }>();
   const navigate = useNavigate();
   const [document, setDocument] = useState<DocumentDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -523,11 +523,12 @@ export function DocumentDetail() {
   const [selectedFileUrl, setSelectedFileUrl] = useState<string | null>(null);
   const [selectedFileName, setSelectedFileName] = useState('');
 
-  const documentId = Number(id);
+  const rawId = routeDocumentId ?? id;
+  const documentId = Number(rawId);
   const canUpload = document?.userRole === 'GESTOR' || document?.userRole === 'ENGENHEIRO';
 
   const fetchDocument = async () => {
-    if (!id || isNaN(documentId)) {
+    if (!rawId || isNaN(documentId)) {
       setError('ID do documento inválido.');
       setIsLoading(false);
       return;
@@ -551,7 +552,7 @@ export function DocumentDetail() {
 
   useEffect(() => {
     fetchDocument();
-  }, [id]);
+  }, [rawId]);
 
   const handlePreview = (revision: RevisionDetail) => {
     setSelectedFileUrl(revision.filePath);

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../../../lib/axios';
 import { useContract } from '../../../contexts/ContractContext';
 import { usePlanning } from '../../planning/hooks/usePlanning';
@@ -8,6 +8,7 @@ import { FileText, UploadCloud, Eye, History, Clock, CheckCircle, AlertCircle, S
 import { UploadForm } from './UploadForm';
 import { DocumentViewer } from './DocumentViewer';
 import { RevisionUploadForm } from './RevisionUploadForm';
+import { RevisionHistoryModal } from './RevisionHistoryModal';
 
 interface Revision {
   id: number;
@@ -55,6 +56,9 @@ export function DocumentList() {
   const [isRevModalOpen, setIsRevModalOpen] = useState(false);
   const [revDocId, setRevDocId] = useState<number | null>(null);
   const [revDocCodigo, setRevDocCodigo] = useState('');
+
+  // ÉPICO 8: Acesso Rápido ao Histórico (Modal/Popover de Versões)
+  const [historyDoc, setHistoryDoc] = useState<Document | null>(null);
 
   const navigate = useNavigate();
   const canUpload = role === 'GESTOR' || role === 'ENGENHEIRO';
@@ -253,9 +257,23 @@ export function DocumentList() {
 
                   return (
                     <tr key={doc.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="p-4 font-medium text-gray-900">{doc.codigoDocumento}</td>
+                      <td className="p-4 font-medium">
+                        <Link
+                          to={`/contracts/${contractId}/documents/${doc.id}`}
+                          className="text-gray-900 hover:text-blue-600 hover:underline cursor-pointer font-semibold transition-colors"
+                          title="Abrir detalhamento do documento"
+                        >
+                          {doc.codigoDocumento}
+                        </Link>
+                      </td>
                       <td className="p-4 text-gray-700 max-w-xs truncate" title={doc.titulo}>
-                        {doc.titulo}
+                        <Link
+                          to={`/contracts/${contractId}/documents/${doc.id}`}
+                          className="hover:text-blue-600 hover:underline cursor-pointer transition-colors"
+                          title={`${doc.titulo} — Abrir detalhamento`}
+                        >
+                          {doc.titulo}
+                        </Link>
                       </td>
                       <td className="p-4">
                         {doc.contractDiscipline ? (
@@ -301,7 +319,13 @@ export function DocumentList() {
                           <FileText className="w-5 h-5" />
                         </button>
 
-                        <button className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors" title="Histórico"><History className="w-5 h-5" /></button>
+                        <button
+                          onClick={() => setHistoryDoc(doc)}
+                          className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                          title="Histórico de Versões"
+                        >
+                          <History className="w-5 h-5" />
+                        </button>
 
                         {canUpload && (
                           <button
@@ -350,6 +374,14 @@ export function DocumentList() {
         documentId={revDocId}
         codigoDocumento={revDocCodigo}
         onSuccess={() => fetchDocuments()}
+      />
+
+      <RevisionHistoryModal
+        isOpen={historyDoc !== null}
+        onClose={() => setHistoryDoc(null)}
+        codigoDocumento={historyDoc?.codigoDocumento ?? ''}
+        titulo={historyDoc?.titulo ?? ''}
+        revisions={historyDoc?.revisions ?? []}
       />
     </>
   );
