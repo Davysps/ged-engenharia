@@ -34,11 +34,17 @@ async function main() {
     data: { nome: 'Davy Silva', email: 'davy@ged.com', senhaHash: 'hash', globalRole: 'USER' }
   });
 
+  // ÉPICO 10: Usuário externo (Cliente) — isClient: true para identificar ator na timeline
+  const cliente = await prisma.user.create({
+    data: { nome: 'Ana Cliente', email: 'ana@vale.com', senhaHash: 'hash', globalRole: 'USER', isClient: true }
+  });
+
   // 4. Distribuir as Permissões no Contrato (RBAC)
   await prisma.contractMembership.createMany({
     data: [
       { userId: gestor.id, contractId: contract.id, role: 'GESTOR' },
       { userId: engenheiro.id, contractId: contract.id, role: 'ENGENHEIRO' },
+      { userId: cliente.id, contractId: contract.id, role: 'LEITOR' },
     ]
   });
 

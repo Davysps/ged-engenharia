@@ -19,7 +19,12 @@ export type RevisionStatus =
   | 'REJEITADO'
   | 'OBSOLETO';
 
-export type ApprovalStatus = 'PENDENTE' | 'APROVADO' | 'REJEITADO';
+// ÉPICO 10: Motor de Aprovação Estrito — status exatos exigidos pelo fluxo
+export type ApprovalStatus =
+  | 'PENDENTE'
+  | 'APROVADO'
+  | 'APROVADO_COM_COMENTARIOS'
+  | 'REPROVADO';
 
 export type Discipline =
   | 'ELETRICA'

@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { prisma } from '../../prisma';
 import { AuthRequest } from '../../middlewares/auth.middleware';
 import { ApprovalStatus, RevisionStatus } from '@prisma/client';
+import { approvalActionSchema } from './approval.schemas';
 
 export const getPendingApprovals = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -74,18 +75,29 @@ export const handleApprovalAction = async (req: AuthRequest, res: Response): Pro
       res.status(400).json({ error: 'ID de aprovação inválido.' });
       return;
     }
-    
-    const isApprove = req.originalUrl.includes('/approve');
-    
-    const actionWorkflow = isApprove ? ApprovalStatus.APROVADO : ApprovalStatus.REJEITADO;
-    const actionRevision = isApprove ? RevisionStatus.APROVADO : RevisionStatus.REJEITADO;
-    
-    const comments = (req.body && req.body.comments) ? String(req.body.comments) : null;
 
-    if (actionWorkflow === ApprovalStatus.REJEITADO && !comments) {
-      res.status(400).json({ error: 'Justificativa técnica é obrigatória ao rejeitar.' });
-      return;
+    // ÉPICO 10: Validação Zod — exige um dos status exatos do fluxo estrito
+    const parsed = approvalActionSchema.parse(req.body);
+    const { status, comments } = parsed;
+
+    // Regras do motor estrito: comentário é obrigatório ao aprovar com comentários ou reprovar
+    let actionComments: string | null = null;
+    if (status === ApprovalStatus.APROVADO_COM_COMENTARIOS || status === ApprovalStatus.REPROVADO) {
+      if (!comments || !comments.trim()) {
+        res.status(400).json({
+          error:
+            status === ApprovalStatus.REPROVADO
+              ? 'Justificativa técnica é obrigatória ao reprovar.'
+              : 'O comentário é obrigatório ao aprovar com comentários.',
+        });
+        return;
+      }
+      actionComments = comments.trim();
     }
+
+    const actionWorkflow = status as ApprovalStatus;
+    const actionRevision =
+      status === ApprovalStatus.REPROVADO ? RevisionStatus.REJEITADO : RevisionStatus.APROVADO;
 
     const workflow = await prisma.approvalWorkflow.findUnique({
       where: { id: approvalId },
@@ -113,6 +125,13 @@ export const handleApprovalAction = async (req: AuthRequest, res: Response): Pro
       return;
     }
 
+    // ÉPICO 10: Identificação de ator — membros externos (Cliente) marcados com isClient
+    const actor = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { isClient: true }
+    });
+    const isClient = actor?.isClient ?? false;
+
     // A CORREÇÃO: Sintaxe Relacional (Checked Input) permite a transação aninhada perfeita!
     await prisma.approvalWorkflow.update({
       where: { id: approvalId },
@@ -120,7 +139,8 @@ export const handleApprovalAction = async (req: AuthRequest, res: Response): Pro
         status: actionWorkflow,
         reviewer: { connect: { id: userId } }, // <-- O SEGREDO ESTÁ AQUI
         reviewedAt: new Date(),
-        comments: comments,
+        comments: actionComments,
+        isClient: isClient,
         revision: {
           update: {
             status: actionRevision
@@ -129,8 +149,12 @@ export const handleApprovalAction = async (req: AuthRequest, res: Response): Pro
       }
     });
 
-    res.status(200).json({ message: `Documento processado como ${actionWorkflow.toLowerCase()} com sucesso.` });
+    res.status(200).json({ message: `Documento processado como ${status} com sucesso.` });
   } catch (error: any) {
+    if (error?.name === 'ZodError') {
+      res.status(400).json({ error: error.issues?.map((i: any) => i.message).join('; ') || 'Payload inválido.' });
+      return;
+    }
     console.error(`[ApprovalController POST] Erro FATAL:`, error);
     const errorMessage = error?.message || 'Falha catastrófica desconhecida no servidor.';
     res.status(500).json({ error: `Erro no Servidor: ${errorMessage}` });

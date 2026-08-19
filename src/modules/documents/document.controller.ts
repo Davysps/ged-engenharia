@@ -109,6 +109,9 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
         revisions: {
           orderBy: { createdAt: 'desc' },
           take: 1,
+          include: {
+            approvalWorkflow: true,
+          },
         }
       }
     });
@@ -118,8 +121,29 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    let nextVersionNumber = 0;
+    // ── ÉPICO 10: GATEKEEPER ─────────────────────────────────────────────
+    // Uma nova revisão SÓ pode ser criada se a revisão anterior estiver com
+    // status geral finalizado (APROVADO/REJEITADO) e sem pendências em aberto.
     const lastRevision = document.revisions[0];
+
+    if (lastRevision) {
+      const isFinalized =
+        lastRevision.status === RevisionStatus.APROVADO ||
+        lastRevision.status === RevisionStatus.REJEITADO;
+      const hasOpenPending =
+        lastRevision.approvalWorkflow?.status === ApprovalStatus.PENDENTE;
+
+      if (!isFinalized || hasOpenPending) {
+        res.status(403).json({
+          error:
+            `GATEKEEPER: A revisão anterior (${lastRevision.versionLabel}) ainda não está finalizada. ` +
+            'Não é possível subir uma nova revisão enquanto houver pendências em aberto no fluxo de aprovação.',
+        });
+        return;
+      }
+    }
+
+    let nextVersionNumber = 0;
 
     if (lastRevision) {
       const match = lastRevision.versionLabel.match(/R(\d+)/i);

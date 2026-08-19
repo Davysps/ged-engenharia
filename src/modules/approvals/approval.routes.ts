@@ -10,10 +10,8 @@ router.use(verifyToken);
 // GET /approvals?contractId=X
 router.get('/', getPendingApprovals);
 
-// POST /approvals/:id/approve
-router.post('/:id/approve', handleApprovalAction);
-
-// POST /approvals/:id/reject
-router.post('/:id/reject', handleApprovalAction);
+// ÉPICO 10: Motor de Aprovação Estrito — ação única que exige um dos status exatos
+// POST /approvals/:id/action  { status: 'APROVADO' | 'APROVADO_COM_COMENTARIOS' | 'REPROVADO', comments? }
+router.post('/:id/action', handleApprovalAction);
 
 export default router;

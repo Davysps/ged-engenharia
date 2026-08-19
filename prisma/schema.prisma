@@ -30,10 +30,12 @@ enum RevisionStatus {
   OBSOLETO
 }
 
+// ÉPICO 10: Motor de Aprovação Estrito — status exatos exigidos pelo fluxo
 enum ApprovalStatus {
-  PENDENTE
-  APROVADO
-  REJEITADO
+  PENDENTE // Aguardando análise
+  APROVADO // Aprovado sem comentários
+  APROVADO_COM_COMENTARIOS // Aprovado com comentários registrados
+  REPROVADO // Reprovado com justificativa
 }
 
 enum Discipline {
@@ -134,6 +136,8 @@ model User {
   email      String     @unique
   senhaHash  String     @map("senha_hash")
   globalRole GlobalRole @default(USER)
+  // ÉPICO 10: Usuário externo (Cliente) ou membro interno (Time) do GED Engenharia
+  isClient   Boolean    @default(false)
 
   contracts        ContractMembership[]
   documentsCreated Document[]           @relation("UserCreatedDocuments")
@@ -223,6 +227,8 @@ model ApprovalWorkflow {
   reviewerId  Int?
   status      ApprovalStatus @default(PENDENTE)
   comments    String?        @db.Text
+  // ÉPICO 10: Diferencia se o autor da ação é interno (Time) ou externo (Cliente)
+  isClient    Boolean        @default(false)
   requestedAt DateTime       @default(now())
   reviewedAt  DateTime?
 

@@ -8,6 +8,7 @@ import { RevisionUploadForm } from './RevisionUploadForm';
 import { TimesheetForm } from './TimesheetForm';
 import { TimesheetList } from './TimesheetList';
 import { useTimesheet } from '../hooks/useTimesheet';
+import { WorkflowFlowchart, getWorkflowStageIndex } from './WorkflowFlowchart';
 import {
   ChevronLeft,
   FileText,
@@ -32,6 +33,9 @@ import {
   History,
   Hourglass,
   PlusCircle,
+  Workflow,
+  ChevronDown,
+  MessageSquare,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -134,6 +138,29 @@ function RevisionStatusBadge({ status }: RevisionStatusBadgeProps) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Sub-component: Actor Badge (ÉPICO 10) — diferencia Time interno do Cliente
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface ActorBadgeProps {
+  isClient: boolean;
+}
+
+function ActorBadge({ isClient }: ActorBadgeProps) {
+  if (isClient) {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 bg-orange-100 text-orange-800 text-[10px] font-bold rounded-full border border-orange-300 uppercase tracking-wide">
+        Cliente
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded-full border border-blue-300 uppercase tracking-wide">
+      Time
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Sub-component: Transmittal Reference List
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -202,13 +229,66 @@ interface RevisionCardProps {
   revision: RevisionDetail;
   isLatest: boolean;
   canUpload: boolean;
+  canApprove: boolean;
   codigoDocumento: string;
   onPreview: (revision: RevisionDetail) => void;
   onUploadSuccess: () => void;
+  onApproved: () => void;
 }
 
-function RevisionCard({ revision, isLatest, canUpload, codigoDocumento, onPreview, onUploadSuccess }: RevisionCardProps) {
+function RevisionCard({ revision, isLatest, canUpload, canApprove, codigoDocumento, onPreview, onUploadSuccess, onApproved }: RevisionCardProps) {
   const [isRevModalOpen, setIsRevModalOpen] = useState(false);
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+  const [isActionSubmitting, setIsActionSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const workflow = revision.approvalWorkflow;
+
+  const runApprovalAction = async (
+    status: 'APROVADO' | 'APROVADO_COM_COMENTARIOS' | 'REPROVADO',
+    comments?: string
+  ) => {
+    if (!workflow) return;
+    try {
+      setIsActionSubmitting(true);
+      setActionError(null);
+      await documentService.approveRevision(workflow.id, status, comments);
+      setIsActionMenuOpen(false);
+      onApproved();
+    } catch (error: unknown) {
+      const message =
+        error && typeof error === 'object' && 'response' in error
+          ? (error as { response?: { data?: { error?: string } } }).response?.data?.error
+          : 'Erro ao processar a ação de aprovação.';
+      setActionError(message || 'Erro ao processar a ação de aprovação.');
+    } finally {
+      setIsActionSubmitting(false);
+    }
+  };
+
+  const handleApproveClean = async () => {
+    await runApprovalAction('APROVADO');
+  };
+
+  const handleApproveWithComments = async () => {
+    const comments = window.prompt('Registre o(s) comentário(s) técnico(s) desta aprovação:');
+    if (comments === null) return;
+    if (!comments.trim()) {
+      window.alert('Ação cancelada: É obrigatório fornecer um comentário ao aprovar com comentários.');
+      return;
+    }
+    await runApprovalAction('APROVADO_COM_COMENTARIOS', comments.trim());
+  };
+
+  const handleReprove = async () => {
+    const comments = window.prompt('Introduza obrigatoriamente a justificativa técnica para reprovar este documento:');
+    if (comments === null) return;
+    if (!comments.trim()) {
+      window.alert('Ação cancelada: É obrigatório fornecer uma justificativa para reprovar o arquivo.');
+      return;
+    }
+    await runApprovalAction('REPROVADO', comments.trim());
+  };
 
   return (
     <>
@@ -299,9 +379,14 @@ function RevisionCard({ revision, isLatest, canUpload, codigoDocumento, onPrevie
                         <CheckCircle2 className="w-3 h-3" /> Aprovado
                       </span>
                     )}
-                    {revision.approvalWorkflow.status === 'REJEITADO' && (
+                    {revision.approvalWorkflow.status === 'APROVADO_COM_COMENTARIOS' && (
+                      <span className="inline-flex items-center gap-1 text-emerald-700">
+                        <MessageSquare className="w-3 h-3" /> Aprovado com Comentários
+                      </span>
+                    )}
+                    {revision.approvalWorkflow.status === 'REPROVADO' && (
                       <span className="inline-flex items-center gap-1 text-red-700">
-                        <XCircle className="w-3 h-3" /> Rejeitado
+                        <XCircle className="w-3 h-3" /> Reprovado
                       </span>
                     )}
                     {revision.approvalWorkflow.status === 'PENDENTE' && (
@@ -313,8 +398,11 @@ function RevisionCard({ revision, isLatest, canUpload, codigoDocumento, onPrevie
                 </div>
                 <div>
                   <span className="text-gray-500 font-medium">Aprovador:</span>
-                  <span className="text-gray-800 ml-1">
+                  <span className="text-gray-800 ml-1 inline-flex items-center gap-1.5">
                     {revision.approvalWorkflow.reviewer?.nome || 'Aguardando análise'}
+                    {revision.approvalWorkflow.reviewer && (
+                      <ActorBadge isClient={revision.approvalWorkflow.isClient} />
+                    )}
                   </span>
                 </div>
                 <div>
@@ -333,13 +421,85 @@ function RevisionCard({ revision, isLatest, canUpload, codigoDocumento, onPrevie
                 )}
                 {revision.approvalWorkflow.comments && (
                   <div className="col-span-2">
-                    <span className="text-gray-500 font-medium">Justificativa:</span>
-                    <p className="text-gray-800 mt-1 p-2 bg-gray-50 rounded border border-gray-100 text-xs">
+                    <span className="text-gray-500 font-medium flex items-center gap-1.5">
+                      {revision.approvalWorkflow.status === 'REPROVADO' ? 'Justificativa:' : 'Comentários:'}
+                      <ActorBadge isClient={revision.approvalWorkflow.isClient} />
+                    </span>
+                    <p
+                      className={`
+                        text-gray-800 mt-1 p-2 rounded border text-xs
+                        ${
+                          revision.approvalWorkflow.isClient
+                            ? 'bg-orange-50 border-orange-200'
+                            : 'bg-blue-50 border-blue-200'
+                        }
+                      `}
+                    >
                       {revision.approvalWorkflow.comments}
                     </p>
                   </div>
                 )}
               </div>
+
+              {/* ÉPICO 10: Ações exatas do Motor de Aprovação Estrito */}
+              {revision.approvalWorkflow.status === 'PENDENTE' && canApprove && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  {actionError && (
+                    <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2 text-xs">
+                      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span>{actionError}</span>
+                    </div>
+                  )}
+
+                  <div className="relative inline-block">
+                    <button
+                      onClick={() => setIsActionMenuOpen(open => !open)}
+                      disabled={isActionSubmitting}
+                      className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 rounded-lg text-sm font-medium transition-colors shadow-sm"
+                    >
+                      {isActionSubmitting ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <CheckCircle className="w-4 h-4" />
+                      )}
+                      Decidir Revisão
+                      <ChevronDown
+                        className={`w-4 h-4 transition-transform ${isActionMenuOpen ? 'rotate-180' : ''}`}
+                      />
+                    </button>
+
+                    {isActionMenuOpen && (
+                      <div className="absolute left-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-20">
+                        <button
+                          onClick={handleApproveClean}
+                          disabled={isActionSubmitting}
+                          className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-800 flex items-center gap-2 disabled:opacity-60"
+                        >
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          Aprovar sem comentários
+                        </button>
+                        <button
+                          onClick={handleApproveWithComments}
+                          disabled={isActionSubmitting}
+                          className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-800 flex items-center gap-2 disabled:opacity-60"
+                        >
+                          <MessageSquare className="w-4 h-4 text-amber-600" />
+                          Aprovar com comentários
+                        </button>
+                        <div className="border-t border-gray-100 my-1"></div>
+                        <button
+                          onClick={handleReprove}
+                          disabled={isActionSubmitting}
+                          className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-800 flex items-center gap-2 disabled:opacity-60"
+                        >
+                          <XCircle className="w-4 h-4 text-red-600" />
+                          Reprovar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -528,9 +688,13 @@ export function DocumentDetail() {
   const [selectedFileUrl, setSelectedFileUrl] = useState<string | null>(null);
   const [selectedFileName, setSelectedFileName] = useState('');
 
+  // ÉPICO 10: Modal do Fluxograma Visual
+  const [isFlowOpen, setIsFlowOpen] = useState(false);
+
   const rawId = routeDocumentId ?? id;
   const documentId = Number(rawId);
   const canUpload = document?.userRole === 'GESTOR' || document?.userRole === 'ENGENHEIRO';
+  const canApprove = document?.userRole === 'GESTOR' || document?.userRole === 'APROVADOR';
 
   // ÉPICO 9: Estado dos Apontamentos de Horas deste documento
   const timesheet = useTimesheet(documentId);
@@ -645,6 +809,14 @@ export function DocumentDetail() {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsFlowOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 rounded-lg font-medium transition-colors"
+            title="Visualizar o fluxograma do fluxo de aprovação"
+          >
+            <Workflow className="w-4 h-4" />
+            Visualizar Fluxo
+          </button>
           {latestRevision && (
             <a
               href={latestRevision.filePath}
@@ -685,9 +857,11 @@ export function DocumentDetail() {
                 revision={revision}
                 isLatest={index === document.revisions.length - 1}
                 canUpload={canUpload}
+                canApprove={canApprove}
                 codigoDocumento={document.codigoDocumento}
                 onPreview={handlePreview}
                 onUploadSuccess={fetchDocument}
+                onApproved={fetchDocument}
               />
             ))}
           </div>
@@ -728,6 +902,15 @@ export function DocumentDetail() {
           </div>
         </div>
       </div>
+
+      {/* ÉPICO 10: Fluxograma Visual Interativo */}
+      <WorkflowFlowchart
+        isOpen={isFlowOpen}
+        onClose={() => setIsFlowOpen(false)}
+        currentStage={getWorkflowStageIndex(latestRevision)}
+        codigoDocumento={document.codigoDocumento}
+        versionLabel={latestRevision?.versionLabel}
+      />
 
       {/* Document Viewer Modal (reutiliza componente existente) */}
       <DocumentViewer

@@ -51,6 +51,8 @@ export interface ApprovalWorkflowDetail {
   requester: UserInfo;
   reviewer: UserInfo | null;
   comments: string | null;
+  // ÉPICO 10: Atores — true = Cliente (externo), false = Time (interno)
+  isClient: boolean;
   requestedAt: string;
   reviewedAt: string | null;
 }
