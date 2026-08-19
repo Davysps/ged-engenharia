@@ -9,13 +9,14 @@ import {
   ArrowRight,
   Check,
   CircleDot,
+  Send,
 } from 'lucide-react';
 import type { RevisionDetail } from '../types/document.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Fluxograma Horizontal do Fluxo de Aprovação (ÉPICO 10)
+// Fluxograma Horizontal do Fluxo de Aprovação (ÉPICO 10 / PATCH 10.1)
 //
-// Etapas: Elaboração ➔ Verificação ➔ Revisão Verificação ➔ Aprovação ➔ Revisão Aprovação
+// Etapas: Elaboração ➔ Verificação ➔ Revisão Verificação ➔ Aprovação ➔ Revisão Aprovação ➔ Emissão
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface FlowStage {
@@ -30,37 +31,51 @@ export const FLOW_STAGES: FlowStage[] = [
   { key: 'revisao_verificacao', label: 'Revisão Verificação', icon: <Repeat className="w-5 h-5" /> },
   { key: 'aprovacao', label: 'Aprovação', icon: <ShieldCheck className="w-5 h-5" /> },
   { key: 'revisao_aprovacao', label: 'Revisão Aprovação', icon: <BadgeCheck className="w-5 h-5" /> },
+  { key: 'emissao', label: 'Emissão', icon: <Send className="w-5 h-5" /> },
 ];
 
 /**
  * Calcula a etapa atual do fluxograma a partir do estado da revisão mais recente.
  *
- * Mapeamento pragmático do modelo de dados atual (uma única ApprovalWorkflow por revisão):
- * - EM_ELABORACAO            → Elaboração (0)
- * - EM_REVISAO + PENDENTE    → Verificação (1)
- * - EM_REVISAO + processada  → Revisão Verificação (2)
- * - REJEITADO                → Aprovação (3) — devolvido para reprocesso
- * - APROVADO                 → Revisão Aprovação (4) — finalizado
+ * Máquina de estados (PATCH 10.1) baseada no ator (isClient) e no status:
+ * - Etapa 1 (Elaboração)          → EM_ELABORACAO
+ * - Etapa 2 (Verificação)         → EM_REVISAO + workflow PENDENTE do Time Interno (isClient: false)
+ * - Etapa 3 (Revisão Verificação) → Time Interno deu APROVADO_COM_COMENTARIOS ou REPROVADO
+ * - Etapa 4 (Aprovação)           → workflow PENDENTE do Cliente (isClient: true)
+ * - Etapa 5 (Revisão Aprovação)   → Cliente deu APROVADO_COM_COMENTARIOS ou REPROVADO
+ * - Etapa 6 (Emissão)             → APROVADO final sem comentários
  */
 export function getWorkflowStageIndex(revision: RevisionDetail | undefined): number {
   if (!revision) return 0;
 
-  switch (revision.status) {
-    case 'EM_ELABORACAO':
-      return 0;
-    case 'EM_REVISAO': {
-      const workflow = revision.approvalWorkflow;
-      if (!workflow || workflow.status === 'PENDENTE') return 1;
-      if (workflow.status === 'REPROVADO') return 1;
-      return 2;
-    }
-    case 'REJEITADO':
-      return 3;
-    case 'APROVADO':
-      return 4;
-    default:
-      return 0;
-  }
+  const workflow = revision.approvalWorkflow;
+  const workflowStatus = workflow?.status;
+  const isClient = workflow?.isClient ?? false;
+
+  // Etapa 1 — Elaboração: revisão criada, ainda não submetida ao fluxo
+  if (revision.status === 'EM_ELABORACAO') return 0;
+
+  // Etapa 6 — Emissão: aprovação final limpa (sem comentários)
+  if (workflowStatus === 'APROVADO' || revision.status === 'APROVADO') return 5;
+
+  // Etapa 3 — Revisão Verificação: Time Interno aprovou com comentários ou reprovou
+  if (!isClient && (workflowStatus === 'APROVADO_COM_COMENTARIOS' || workflowStatus === 'REPROVADO')) return 2;
+
+  // Etapa 5 — Revisão Aprovação: Cliente aprovou com comentários ou reprovou
+  if (isClient && (workflowStatus === 'APROVADO_COM_COMENTARIOS' || workflowStatus === 'REPROVADO')) return 4;
+
+  // Etapa 2 — Verificação: aguardando análise do Time Interno
+  if (revision.status === 'EM_REVISAO' && workflowStatus === 'PENDENTE' && !isClient) return 1;
+
+  // Etapa 4 — Aprovação: aguardando análise do Cliente
+  if (workflowStatus === 'PENDENTE' && isClient) return 3;
+
+  // Fallbacks para estados residuais do modelo de dados
+  if (revision.status === 'EM_REVISAO') return 1;
+  if (revision.status === 'REJEITADO') return 2;
+  if (revision.status === 'OBSOLETO') return 0;
+
+  return 0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,6 +88,9 @@ interface WorkflowFlowchartProps {
   currentStage: number;
   codigoDocumento?: string;
   versionLabel?: string;
+  // ÉPICO 10.1: true quando o documento está APROVADO sem comentários e já
+  // possui GRD vinculada — destrava a etapa "Emissão" como concluída.
+  isEmitted?: boolean;
 }
 
 export function WorkflowFlowchart({
@@ -81,10 +99,12 @@ export function WorkflowFlowchart({
   currentStage,
   codigoDocumento,
   versionLabel,
+  isEmitted = false,
 }: WorkflowFlowchartProps) {
   if (!isOpen) return null;
 
   const clampedStage = Math.max(0, Math.min(FLOW_STAGES.length - 1, currentStage));
+  const isFullyEmitted = isEmitted && clampedStage === FLOW_STAGES.length - 1;
 
   return (
     <div
@@ -121,8 +141,9 @@ export function WorkflowFlowchart({
           <div className="overflow-x-auto pb-2">
             <div className="flex items-center min-w-[760px]">
               {FLOW_STAGES.map((stage, index) => {
-                const isCompleted = index < clampedStage;
-                const isCurrent = index === clampedStage;
+                const isCompleted =
+                  index < clampedStage || (isFullyEmitted && index === clampedStage);
+                const isCurrent = index === clampedStage && !isFullyEmitted;
 
                 return (
                   <div key={stage.key} className="flex items-center flex-1 last:flex-none">

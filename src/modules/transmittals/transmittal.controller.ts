@@ -1,5 +1,6 @@
 import { Request, Response, RequestHandler } from 'express';
 import { prisma } from '../../prisma';
+import { createTransmittalSchema } from './transmittal.schemas';
 
 export class TransmittalController {
   
@@ -14,22 +15,9 @@ export class TransmittalController {
         return;
       }
 
-      const { assunto, mensagem, destinatario, proposito, revisionIds } = req.body;
-
-      // SANEAMENTO RIGOROSO: Garante que extraímos apenas números válidos do array
-      const validRevisionIds = Array.isArray(revisionIds) 
-        ? revisionIds.filter(id => id !== null && id !== undefined && !isNaN(Number(id))).map(Number)
-        : [];
-
-      if (!assunto || !proposito) {
-        res.status(400).json({ error: 'Os campos Assunto e Propósito são obrigatórios.' });
-        return;
-      }
-
-      if (validRevisionIds.length === 0) {
-        res.status(400).json({ error: 'Pelo menos um documento válido deve ser selecionado para gerar a GRD.' });
-        return;
-      }
+      // ÉPICO 10.1: Validação rigorosa do payload via Zod (substitui a sanitização manual)
+      const parsed = createTransmittalSchema.parse(req.body);
+      const { assunto, mensagem, destinatario, proposito, revisionIds: validRevisionIds } = parsed;
 
       const membership = await prisma.contractMembership.findFirst({
         where: { userId: userId, contractId: contractId }
@@ -37,6 +25,47 @@ export class TransmittalController {
 
       if (!membership || !['GESTOR', 'ENGENHEIRO'].includes(membership.role)) {
         res.status(403).json({ error: 'Permissão negada. Apenas Gestores ou Engenheiros podem emitir Transmittals.' });
+        return;
+      }
+
+      // ── GATEKEEPER DE GRD (ÉPICO 10.1) ──────────────────────────────────
+      // Trava de segurança crítica: toda revisão do lote DEVE estar com o
+      // status de aprovação final "APROVADO". Documento PENDENTE ou REPROVADO
+      // bloqueia a emissão da Guia de Remessa com erro 400 (Bad Request).
+      const batchRevisions = await prisma.revision.findMany({
+        where: {
+          id: { in: validRevisionIds },
+          document: { contractId: contractId }
+        },
+        select: {
+          id: true,
+          status: true,
+          versionLabel: true,
+          document: { select: { codigoDocumento: true } }
+        }
+      });
+
+      const foundIds = new Set(batchRevisions.map(r => r.id));
+      const unknownIds = validRevisionIds.filter(id => !foundIds.has(id));
+      if (unknownIds.length > 0) {
+        res.status(400).json({
+          error: 'GATEKEEPER GRD: Um ou mais documentos do lote não pertencem a este contrato ou não existem.'
+        });
+        return;
+      }
+
+      const blocked = batchRevisions.filter(r => r.status !== 'APROVADO');
+      if (blocked.length > 0) {
+        const blockedDesc = blocked
+          .map(r => `${r.document.codigoDocumento} (${r.versionLabel}) — ${r.status}`)
+          .join('; ');
+        res.status(400).json({
+          error:
+            'GATEKEEPER GRD: Todos os documentos do lote devem estar com o status final "APROVADO" ' +
+            'para emissão da Guia de Remessa. Bloqueado(s): ' +
+            blockedDesc +
+            '.'
+        });
         return;
       }
 
@@ -55,7 +84,7 @@ export class TransmittalController {
             createdById: userId,
             status: 'EM_PROCESSAMENTO',
             items: {
-              // Injeta apenas os IDs limpos e validados
+              // Injeta apenas os IDs limpos e validados pelo Zod
               create: validRevisionIds.map(id => ({ revisionId: id }))
             }
           },
@@ -68,7 +97,11 @@ export class TransmittalController {
         transmittal
       });
 
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'ZodError') {
+        res.status(400).json({ error: error.issues?.map((i: any) => i.message).join('; ') || 'Payload inválido.' });
+        return;
+      }
       console.error('[TransmittalController] Erro na criação:', error);
       res.status(500).json({ error: 'Erro interno ao gerar a Guia de Remessa.' });
     }
@@ -116,7 +149,9 @@ export class TransmittalController {
         codigoDocumento: rev.document.codigoDocumento,
         titulo: rev.document.titulo,
         versionLabel: rev.versionLabel,
-        disciplina: rev.document.contractDiscipline?.nome ?? 'Não definida'
+        disciplina: rev.document.contractDiscipline?.nome ?? 'Não definida',
+        // ÉPICO 10.1: expõe o status para o frontend filtrar apenas APROVADO
+        status: rev.status
       }));
 
       const uniqueDocs = new Map();

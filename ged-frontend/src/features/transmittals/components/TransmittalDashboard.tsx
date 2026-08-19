@@ -46,15 +46,31 @@ export const TransmittalDashboard: React.FC = () => {
 
   const handleToggleSelection = (id: number) => {
     if (!id) return; // PROTEÇÃO: Impede injeção de nulls no array
+    // ÉPICO 10.1: só permite selecionar revisões com status final APROVADO
+    const revision = approvedRevisions.find(r => r.id === id);
+    if (!revision || revision.status !== 'APROVADO') return;
     setSelectedRevisionIds(prev => 
       prev.includes(id) ? prev.filter(rId => rId !== id) : [...prev, id]
     );
   };
 
+  // ÉPICO 10.1: filtragem dupla (backend + frontend) — apenas documentos APROVADOS
+  const selectableRevisions = approvedRevisions.filter(rev => rev.status === 'APROVADO');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedRevisionIds.length === 0) {
       alert('Selecione pelo menos um documento aprovado.');
+      return;
+    }
+    
+    // ÉPICO 10.1: defesa em profundidade — nenhum item fora do status APROVADO no lote
+    const allApproved = selectedRevisionIds.every(id =>
+      approvedRevisions.find(r => r.id === id)?.status === 'APROVADO'
+    );
+    if (!allApproved) {
+      alert('GATEKEEPER GRD: Apenas documentos com status "APROVADO" podem ser emitidos na Guia de Remessa.');
+      setSelectedRevisionIds([]);
       return;
     }
     
@@ -102,14 +118,14 @@ export const TransmittalDashboard: React.FC = () => {
           <div className="lg:col-span-2 bg-white rounded-lg shadow border border-gray-200 overflow-hidden h-fit">
             <div className="p-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
               <h2 className="font-semibold text-gray-700">Documentos Físicos (Aprovados)</h2>
-              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded font-bold">{approvedRevisions.length} Disponíveis</span>
+              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded font-bold">{selectableRevisions.length} Disponíveis</span>
             </div>
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider text-left">
                 <tr><th className="px-6 py-3">Sel.</th><th className="px-6 py-3">Código</th><th className="px-6 py-3">Título</th><th className="px-6 py-3">Rev</th></tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {approvedRevisions.map(rev => (
+                {selectableRevisions.map(rev => (
                   <tr key={`doc-real-${rev.id}`} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
                       <input 
@@ -124,7 +140,7 @@ export const TransmittalDashboard: React.FC = () => {
                     <td className="px-6 py-4 text-sm font-bold"><span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">{rev.versionLabel}</span></td>
                   </tr>
                 ))}
-                {approvedRevisions.length === 0 && (
+                {selectableRevisions.length === 0 && (
                   <tr><td colSpan={4} className="px-6 py-8 text-center text-sm text-gray-500">O acervo técnico ainda não possui documentos com o status de aprovação final.</td></tr>
                 )}
               </tbody>

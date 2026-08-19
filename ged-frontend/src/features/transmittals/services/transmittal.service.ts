@@ -34,6 +34,8 @@ export interface RealApprovedRevision {
   titulo: string;
   versionLabel: string;
   disciplina: string;
+  // ÉPICO 10.1: status exposto pelo backend para filtragem dupla no frontend
+  status: 'EM_ELABORACAO' | 'EM_REVISAO' | 'APROVADO' | 'REJEITADO' | 'OBSOLETO';
 }
 
 export const transmittalService = {

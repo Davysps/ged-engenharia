@@ -292,9 +292,9 @@ function RevisionCard({ revision, isLatest, canUpload, canApprove, codigoDocumen
 
   return (
     <>
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-4">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-4">
         {/* Header da Revisão */}
-        <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+        <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between rounded-t-xl">
           <div className="flex items-center gap-3">
             <Tag className="w-5 h-5 text-indigo-600" />
             <span className="text-xl font-bold text-gray-900">{revision.versionLabel}</span>
@@ -469,7 +469,7 @@ function RevisionCard({ revision, isLatest, canUpload, canApprove, codigoDocumen
                     </button>
 
                     {isActionMenuOpen && (
-                      <div className="absolute left-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-20">
+                      <div className="absolute left-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50">
                         <button
                           onClick={handleApproveClean}
                           disabled={isActionSubmitting}
@@ -519,7 +519,7 @@ function RevisionCard({ revision, isLatest, canUpload, canApprove, codigoDocumen
 
         {/* Footer: Ações da Revisão */}
         {isLatest && canUpload && (
-          <div className="p-3 border-t border-gray-100 bg-gray-50 flex justify-end">
+          <div className="p-3 border-t border-gray-100 bg-gray-50 flex justify-end rounded-b-xl">
             <button
               onClick={() => setIsRevModalOpen(true)}
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
@@ -910,6 +910,12 @@ export function DocumentDetail() {
         currentStage={getWorkflowStageIndex(latestRevision)}
         codigoDocumento={document.codigoDocumento}
         versionLabel={latestRevision?.versionLabel}
+        isEmitted={
+          !!latestRevision &&
+          latestRevision.status === 'APROVADO' &&
+          latestRevision.approvalWorkflow?.status === 'APROVADO' &&
+          latestRevision.transmittalItems.length > 0
+        }
       />
 
       {/* Document Viewer Modal (reutiliza componente existente) */}
