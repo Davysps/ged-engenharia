@@ -38,6 +38,13 @@ enum ApprovalStatus {
   REPROVADO // Reprovado com justificativa
 }
 
+// PATCH 10.2: Estágio do Carimbo dentro da Máquina de Estados de Engenharia
+enum ApprovalStage {
+  VERIFICACAO // Carimbo 1 — Time Interno (Sênior/Pleno)
+  APROVACAO // Carimbo 2 — Coordenação
+  CLIENTE // Carimbo 3 — Análise do Cliente pós-emissão (GRD)
+}
+
 enum Discipline {
   ELETRICA
   HIDRAULICA
@@ -211,7 +218,10 @@ model Revision {
   comments     Json? // Para futuro Markup/Redlining
   createdAt    DateTime       @default(now())
 
-  approvalWorkflow ApprovalWorkflow?
+  // PATCH 10.2: Histórico de aprovações — UM revision pode ter VÁRIOS carimbos
+  // (Verificação → Aprovação → Análise do Cliente). Cada carimbo é um registro
+  // novo, preservando o histórico e nunca sobrescrevendo o antigo.
+  approvalWorkflows ApprovalWorkflow[]
 
   // Relação Épico 4
   transmittalItems TransmittalItem[]
@@ -220,7 +230,8 @@ model Revision {
 model ApprovalWorkflow {
   id          Int            @id @default(autoincrement())
   revision    Revision       @relation(fields: [revisionId], references: [id], onDelete: Cascade)
-  revisionId  Int            @unique
+  // PATCH 10.2: Removida a restrição @unique — cada carimbo é um registro novo
+  revisionId  Int
   requester   User           @relation("UserRequestedApprovals", fields: [requesterId], references: [id])
   requesterId Int
   reviewer    User?          @relation("UserReviewedApprovals", fields: [reviewerId], references: [id])
@@ -229,11 +240,16 @@ model ApprovalWorkflow {
   comments    String?        @db.Text
   // ÉPICO 10: Diferencia se o autor da ação é interno (Time) ou externo (Cliente)
   isClient    Boolean        @default(false)
+  // PATCH 10.2: Estágio do carimbo na Máquina de Estados de Engenharia
+  stage       ApprovalStage  @default(VERIFICACAO)
+  // PATCH 10.2: Link do PDF comentado anexado na análise (aprovado c/ comentários ou reprovado)
+  commentedFileUrl String?
   requestedAt DateTime       @default(now())
   reviewedAt  DateTime?
 
   @@index([status])
   @@index([requesterId])
+  @@index([revisionId])
 }
 
 model Transmittal {

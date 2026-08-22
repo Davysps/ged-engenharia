@@ -10,13 +10,24 @@ import {
   Check,
   CircleDot,
   Send,
+  Users,
 } from 'lucide-react';
 import type { RevisionDetail } from '../types/document.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Fluxograma Horizontal do Fluxo de Aprovação (ÉPICO 10 / PATCH 10.1)
+// Fluxograma Horizontal do Fluxo de Aprovação (ÉPICO 10 / PATCH 10.1 / 10.2)
 //
-// Etapas: Elaboração ➔ Verificação ➔ Revisão Verificação ➔ Aprovação ➔ Revisão Aprovação ➔ Emissão
+// MÁQUINA DE ESTADOS DE ENGENHARIA (PATCH 10.2) — 7 Estágios:
+// Elaboração ➔ Verificação ➔ Revisão Verificação ➔ Aprovação (Coordenação)
+// ➔ Revisão Aprovação ➔ Emissão (GRD) ➔ Análise do Cliente
+//
+//  0 Elaboração           → R0/R1 nasce, ainda não submetida ao fluxo
+//  1 Verificação          → Carimbo 1: Time Interno (Sênior/Pleno) analisa
+//  2 Revisão Verificação  → Time reprovou/comentou → retorno ao autor
+//  3 Aprovação (Coord.)   → Carimbo 2: Coordenação analisa
+//  4 Revisão Aprovação    → Coordenação reprovou/comentou → retorno ao autor
+//  5 Emissão (GRD)        → Coordenação aprovou limpo → documento trava p/ GRD
+//  6 Análise do Cliente   → Pós-emissão: Cliente avalia (anexa PDF comentado)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface FlowStage {
@@ -29,50 +40,58 @@ export const FLOW_STAGES: FlowStage[] = [
   { key: 'elaboracao', label: 'Elaboração', icon: <FilePen className="w-5 h-5" /> },
   { key: 'verificacao', label: 'Verificação', icon: <FileSearch className="w-5 h-5" /> },
   { key: 'revisao_verificacao', label: 'Revisão Verificação', icon: <Repeat className="w-5 h-5" /> },
-  { key: 'aprovacao', label: 'Aprovação', icon: <ShieldCheck className="w-5 h-5" /> },
+  { key: 'aprovacao', label: 'Aprovação (Coordenação)', icon: <ShieldCheck className="w-5 h-5" /> },
   { key: 'revisao_aprovacao', label: 'Revisão Aprovação', icon: <BadgeCheck className="w-5 h-5" /> },
-  { key: 'emissao', label: 'Emissão', icon: <Send className="w-5 h-5" /> },
+  { key: 'emissao', label: 'Emissão (GRD)', icon: <Send className="w-5 h-5" /> },
+  { key: 'analise_cliente', label: 'Análise do Cliente', icon: <Users className="w-5 h-5" /> },
 ];
 
 /**
  * Calcula a etapa atual do fluxograma a partir do estado da revisão mais recente.
  *
- * Máquina de estados (PATCH 10.1) baseada no ator (isClient) e no status:
- * - Etapa 1 (Elaboração)          → EM_ELABORACAO
- * - Etapa 2 (Verificação)         → EM_REVISAO + workflow PENDENTE do Time Interno (isClient: false)
- * - Etapa 3 (Revisão Verificação) → Time Interno deu APROVADO_COM_COMENTARIOS ou REPROVADO
- * - Etapa 4 (Aprovação)           → workflow PENDENTE do Cliente (isClient: true)
- * - Etapa 5 (Revisão Aprovação)   → Cliente deu APROVADO_COM_COMENTARIOS ou REPROVADO
- * - Etapa 6 (Emissão)             → APROVADO final sem comentários
+ * Máquina de estados (PATCH 10.2) baseada no estágio (stage) do último carimbo:
+ * - Etapa 0 (Elaboração)            → EM_ELABORACAO
+ * - Etapa 1 (Verificação)           → carimbo VERIFICACAO PENDENTE
+ * - Etapa 2 (Revisão Verificação)   → carimbo VERIFICACAO reprovou/comentou
+ * - Etapa 3 (Aprovação Coordenação) → carimbo APROVACAO PENDENTE
+ * - Etapa 4 (Revisão Aprovação)     → carimbo APROVACAO reprovou/comentou
+ * - Etapa 5 (Emissão GRD)           → carimbo APROVACAO aprovado limpo
+ * - Etapa 6 (Análise do Cliente)    → carimbo CLIENTE criado (pós-emissão)
  */
 export function getWorkflowStageIndex(revision: RevisionDetail | undefined): number {
   if (!revision) return 0;
 
-  const workflow = revision.approvalWorkflow;
-  const workflowStatus = workflow?.status;
-  const isClient = workflow?.isClient ?? false;
+  const approvals = revision.approvalWorkflows ?? [];
 
-  // Etapa 1 — Elaboração: revisão criada, ainda não submetida ao fluxo
+  // Etapa 0 — Elaboração: revisão criada, ainda não submetida ao fluxo
   if (revision.status === 'EM_ELABORACAO') return 0;
 
-  // Etapa 6 — Emissão: aprovação final limpa (sem comentários)
-  if (workflowStatus === 'APROVADO' || revision.status === 'APROVADO') return 5;
+  // Etapa 6 — Análise do Cliente: carimbo CLIENTE existe (pós-emissão via GRD)
+  const hasClientAnalysis = approvals.some((a) => a.stage === 'CLIENTE');
+  if (hasClientAnalysis) return 6;
 
-  // Etapa 3 — Revisão Verificação: Time Interno aprovou com comentários ou reprovou
-  if (!isClient && (workflowStatus === 'APROVADO_COM_COMENTARIOS' || workflowStatus === 'REPROVADO')) return 2;
+  const latest = approvals.length > 0 ? approvals[approvals.length - 1] : undefined;
 
-  // Etapa 5 — Revisão Aprovação: Cliente aprovou com comentários ou reprovou
-  if (isClient && (workflowStatus === 'APROVADO_COM_COMENTARIOS' || workflowStatus === 'REPROVADO')) return 4;
+  if (latest) {
+    // Etapas 1/2 — Verificação / Revisão Verificação
+    if (latest.stage === 'VERIFICACAO') {
+      if (latest.status === 'PENDENTE') return 1;
+      if (latest.status === 'APROVADO_COM_COMENTARIOS' || latest.status === 'REPROVADO') return 2;
+      // Verificação limpa → o próximo carimbo (APROVACAO) deve existir
+    }
 
-  // Etapa 2 — Verificação: aguardando análise do Time Interno
-  if (revision.status === 'EM_REVISAO' && workflowStatus === 'PENDENTE' && !isClient) return 1;
-
-  // Etapa 4 — Aprovação: aguardando análise do Cliente
-  if (workflowStatus === 'PENDENTE' && isClient) return 3;
+    // Etapas 3/4/5 — Aprovação Coordenação / Revisão Aprovação / Emissão
+    if (latest.stage === 'APROVACAO') {
+      if (latest.status === 'PENDENTE') return 3;
+      if (latest.status === 'APROVADO_COM_COMENTARIOS' || latest.status === 'REPROVADO') return 4;
+      if (latest.status === 'APROVADO') return 5; // documento travado p/ Emissão
+    }
+  }
 
   // Fallbacks para estados residuais do modelo de dados
-  if (revision.status === 'EM_REVISAO') return 1;
-  if (revision.status === 'REJEITADO') return 2;
+  if (revision.status === 'APROVADO') return 5; // Emissão (aguardando GRD)
+  if (revision.status === 'REJEITADO') return 2; // Retorno ao autor
+  if (revision.status === 'EM_REVISAO') return 1; // Verificação
   if (revision.status === 'OBSOLETO') return 0;
 
   return 0;
@@ -88,8 +107,8 @@ interface WorkflowFlowchartProps {
   currentStage: number;
   codigoDocumento?: string;
   versionLabel?: string;
-  // ÉPICO 10.1: true quando o documento está APROVADO sem comentários e já
-  // possui GRD vinculada — destrava a etapa "Emissão" como concluída.
+  // ÉPICO 10.1: true quando o documento foi emitido via GRD — destrava a etapa
+  // "Emissão" como concluída (e marca a "Análise do Cliente" como etapa atual).
   isEmitted?: boolean;
 }
 
@@ -112,7 +131,7 @@ export function WorkflowFlowchart({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -120,7 +139,7 @@ export function WorkflowFlowchart({
           <div>
             <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
               <BadgeCheck className="w-6 h-6 text-indigo-600" />
-              Fluxograma do Fluxo de Aprovação
+              Máquina de Estados — Fluxo de Aprovação
             </h2>
             <p className="text-sm text-gray-500 mt-1">
               {codigoDocumento && <span className="font-mono font-medium text-gray-700">{codigoDocumento}</span>}
@@ -139,7 +158,7 @@ export function WorkflowFlowchart({
         {/* Body: Fluxograma Horizontal */}
         <div className="p-6">
           <div className="overflow-x-auto pb-2">
-            <div className="flex items-center min-w-[760px]">
+            <div className="flex items-center min-w-[880px]">
               {FLOW_STAGES.map((stage, index) => {
                 const isCompleted =
                   index < clampedStage || (isFullyEmitted && index === clampedStage);
@@ -214,6 +233,9 @@ export function WorkflowFlowchart({
             <span className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-full bg-gray-200"></span>
               Pendente
+            </span>
+            <span className="ml-auto text-gray-400">
+              Dois carimbos internos (Verificação + Coordenação) antes da Emissão via GRD.
             </span>
           </div>
         </div>

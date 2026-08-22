@@ -5,7 +5,7 @@
  * verbatimModuleSyntax (exigido pelo tsconfig.app.json do frontend).
  */
 
-import type { RevisionStatus, ApprovalStatus, DocumentOcrStatus, TransmittalStatus, ContractRole } from '../../../types/prisma-types';
+import type { RevisionStatus, ApprovalStatus, ApprovalStage, DocumentOcrStatus, TransmittalStatus, ContractRole } from '../../../types/prisma-types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos Auxiliares
@@ -48,9 +48,13 @@ export interface WorkPackageRef {
 export interface ApprovalWorkflowDetail {
   id: number;
   status: ApprovalStatus;
+  // PATCH 10.2: Estágio do carimbo na Máquina de Estados (Verificação/Aprovação/Cliente)
+  stage: ApprovalStage;
   requester: UserInfo;
   reviewer: UserInfo | null;
   comments: string | null;
+  // PATCH 10.2: Link do PDF comentado anexado na análise
+  commentedFileUrl: string | null;
   // ÉPICO 10: Atores — true = Cliente (externo), false = Time (interno)
   isClient: boolean;
   requestedAt: string;
@@ -87,7 +91,8 @@ export interface RevisionDetail {
   fileHash: string;
   status: RevisionStatus;
   createdAt: string;
-  approvalWorkflow: ApprovalWorkflowDetail | null;
+  // PATCH 10.2: Histórico completo de carimbos (Verificação → Aprovação → Cliente)
+  approvalWorkflows: ApprovalWorkflowDetail[];
   transmittalItems: TransmittalItemDetail[];
 }
 

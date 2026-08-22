@@ -112,7 +112,9 @@ export class DocumentService {
         revisions: {
           orderBy: { createdAt: 'asc' },
           include: {
-            approvalWorkflow: {
+            // PATCH 10.2: Histórico completo de carimbos (Verificação → Aprovação → Cliente)
+            approvalWorkflows: {
+              orderBy: { requestedAt: 'asc' },
               include: {
                 requester: { select: { nome: true } },
                 reviewer: { select: { nome: true } },

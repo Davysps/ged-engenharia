@@ -21,21 +21,33 @@ export const documentService = {
   },
 
   /**
-   * ÉPICO 10 — Motor de Aprovação Estrito.
+   * ÉPICO 10 / PATCH 10.2 — Motor de Aprovação Estrito.
    * Executa uma ação de aprovação exigindo um dos status exatos do fluxo.
+   * O payload é enviado como multipart/form-data para suportar o anexo do
+   * PDF comentado (campo `commentedFile`) em APROVADO_COM_COMENTARIOS/REPROVADO.
    *
-   * @param approvalId - ID do ApprovalWorkflow
-   * @param status     - 'APROVADO' | 'APROVADO_COM_COMENTARIOS' | 'REPROVADO'
-   * @param comments   - Comentário/justificativa (obrigatório nos dois últimos)
+   * @param approvalId    - ID do ApprovalWorkflow
+   * @param status        - 'APROVADO' | 'APROVADO_COM_COMENTARIOS' | 'REPROVADO'
+   * @param comments      - Comentário/justificativa (obrigatório nos dois últimos)
+   * @param commentedFile - Arquivo PDF comentado opcional (File | Blob)
    */
   async approveRevision(
     approvalId: number,
     status: Exclude<ApprovalStatus, 'PENDENTE'>,
-    comments?: string
+    comments?: string,
+    commentedFile?: File | Blob | null
   ): Promise<{ message: string }> {
-    const response = await api.post<{ message: string }>(`/approvals/${approvalId}/action`, {
-      status,
-      comments,
+    const formData = new FormData();
+    formData.append('status', status);
+    if (comments) {
+      formData.append('comments', comments);
+    }
+    if (commentedFile) {
+      formData.append('commentedFile', commentedFile);
+    }
+
+    const response = await api.post<{ message: string }>(`/approvals/${approvalId}/action`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data;
   },

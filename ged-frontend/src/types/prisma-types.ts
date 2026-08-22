@@ -26,6 +26,9 @@ export type ApprovalStatus =
   | 'APROVADO_COM_COMENTARIOS'
   | 'REPROVADO';
 
+// PATCH 10.2: Estágio do Carimbo na Máquina de Estados de Engenharia
+export type ApprovalStage = 'VERIFICACAO' | 'APROVACAO' | 'CLIENTE';
+
 export type Discipline =
   | 'ELETRICA'
   | 'HIDRAULICA'

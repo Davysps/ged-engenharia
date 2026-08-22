@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { RevisionStatus, ApprovalStatus, DocumentOcrStatus } from '@prisma/client';
+import { RevisionStatus, ApprovalStatus, ApprovalStage, DocumentOcrStatus } from '@prisma/client';
 import { prisma } from '../../prisma';
 import { uploadFileToS3 } from '../../services/s3.service';
 import type { AuthRequest } from '../../middlewares/auth.middleware';
@@ -45,10 +45,11 @@ export const uploadDocument = async (req: AuthRequest, res: Response): Promise<v
             filePath: filePath, 
             fileHash: fileHash, 
             status: RevisionStatus.EM_REVISAO, 
-            approvalWorkflow: {
+            approvalWorkflows: {
               create: {
                 requesterId: userId,
-                status: ApprovalStatus.PENDENTE 
+                status: ApprovalStatus.PENDENTE,
+                stage: ApprovalStage.VERIFICACAO 
               }
             }
           }
@@ -56,7 +57,7 @@ export const uploadDocument = async (req: AuthRequest, res: Response): Promise<v
       },
       include: {
         revisions: {
-          include: { approvalWorkflow: true }
+          include: { approvalWorkflows: true }
         } 
       }
     });
@@ -110,7 +111,9 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
           orderBy: { createdAt: 'desc' },
           take: 1,
           include: {
-            approvalWorkflow: true,
+            approvalWorkflows: {
+              orderBy: { requestedAt: 'asc' },
+            },
           },
         }
       }
@@ -121,23 +124,38 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // ── ÉPICO 10: GATEKEEPER ─────────────────────────────────────────────
-    // Uma nova revisão SÓ pode ser criada se a revisão anterior estiver com
-    // status geral finalizado (APROVADO/REJEITADO) e sem pendências em aberto.
+    // ── ÉPICO 10 / PATCH 10.2: GATEKEEPER DE NOVA REVISÃO ────────────────
+    // Uma nova revisão (R1, R2...) SÓ é desbloqueada quando:
+    //   (a) o ciclo de "Análise do Cliente" já foi concluído, OU
+    //   (b) o fluxo interno/cliente reprovou e exige uma nova versão oficial, OU
+    //   (c) dados legados sem carimbos (retrocompatibilidade).
+    // Qualquer carimbo ainda PENDENTE bloqueia a subida.
     const lastRevision = document.revisions[0];
 
     if (lastRevision) {
-      const isFinalized =
-        lastRevision.status === RevisionStatus.APROVADO ||
-        lastRevision.status === RevisionStatus.REJEITADO;
-      const hasOpenPending =
-        lastRevision.approvalWorkflow?.status === ApprovalStatus.PENDENTE;
+      const approvals = lastRevision.approvalWorkflows ?? [];
+      const hasOpenPending = approvals.some(
+        (approval) => approval.status === ApprovalStatus.PENDENTE
+      );
 
-      if (!isFinalized || hasOpenPending) {
+      const clientApprovals = approvals.filter((a) => a.stage === ApprovalStage.CLIENTE);
+      const clientCycleDone =
+        clientApprovals.length > 0 &&
+        clientApprovals.every((a) => a.status !== ApprovalStatus.PENDENTE);
+
+      const needsNewOfficialVersion = lastRevision.status === RevisionStatus.REJEITADO;
+      const legacyWithoutApprovals =
+        approvals.length === 0 && lastRevision.status === RevisionStatus.APROVADO;
+
+      const canCreateNewRevision =
+        !hasOpenPending && (clientCycleDone || needsNewOfficialVersion || legacyWithoutApprovals);
+
+      if (!canCreateNewRevision) {
         res.status(403).json({
           error:
-            `GATEKEEPER: A revisão anterior (${lastRevision.versionLabel}) ainda não está finalizada. ` +
-            'Não é possível subir uma nova revisão enquanto houver pendências em aberto no fluxo de aprovação.',
+            `GATEKEEPER: A revisão anterior (${lastRevision.versionLabel}) ainda não concluiu o fluxo. ` +
+            'A nova revisão só é desbloqueada após o ciclo de Análise do Cliente ser concluído ' +
+            'ou quando o fluxo reprova e exige uma nova versão oficial.',
         });
         return;
       }
@@ -179,15 +197,16 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
           filePath: filePath,
           fileHash: fileHash, 
           status: RevisionStatus.EM_REVISAO, 
-          approvalWorkflow: {
+          approvalWorkflows: {
             create: {
               requesterId: userId,
-              status: ApprovalStatus.PENDENTE 
+              status: ApprovalStatus.PENDENTE,
+              stage: ApprovalStage.VERIFICACAO
             }
           }
         },
         include: {
-          approvalWorkflow: true
+          approvalWorkflows: true
         }
       });
     });

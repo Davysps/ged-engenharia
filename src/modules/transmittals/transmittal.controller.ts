@@ -1,5 +1,6 @@
 import { Request, Response, RequestHandler } from 'express';
 import { prisma } from '../../prisma';
+import { ApprovalStatus, ApprovalStage } from '@prisma/client';
 import { createTransmittalSchema } from './transmittal.schemas';
 
 export class TransmittalController {
@@ -89,6 +90,33 @@ export class TransmittalController {
             }
           },
           include: { items: true }
+        }).then(async (transmittal) => {
+          // ── PATCH 10.2: ANÁLISE DO CLIENTE PÓS-EMISSÃO ──────────────────
+          // A emissão via GRD destrava o carimbo final do Cliente (isClient: true).
+          // Cada revisão do lote recebe um novo registro ApprovalWorkflow (estágio
+          // CLIENTE) — sem sobrescrever o histórico já existente.
+          for (const revisionId of validRevisionIds) {
+            const hasPendingClientAnalysis = await tx.approvalWorkflow.findFirst({
+              where: {
+                revisionId,
+                stage: ApprovalStage.CLIENTE,
+                status: ApprovalStatus.PENDENTE,
+              },
+            });
+
+            if (!hasPendingClientAnalysis) {
+              await tx.approvalWorkflow.create({
+                data: {
+                  revisionId,
+                  requesterId: userId,
+                  stage: ApprovalStage.CLIENTE,
+                  status: ApprovalStatus.PENDENTE,
+                },
+              });
+            }
+          }
+
+          return transmittal;
         });
       });
 

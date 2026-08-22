@@ -8,6 +8,8 @@ interface User {
   nome: string;
   email: string;
   role: string;
+  // PATCH 10.2: Identifica ator externo (Cliente) para a Análise pós-emissão
+  isClient?: boolean;
 }
 
 interface AuthContextData {

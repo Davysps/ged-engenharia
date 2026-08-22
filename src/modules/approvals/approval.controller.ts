@@ -1,13 +1,20 @@
 import { Response } from 'express';
 import { prisma } from '../../prisma';
 import { AuthRequest } from '../../middlewares/auth.middleware';
-import { ApprovalStatus, RevisionStatus } from '@prisma/client';
+import { ApprovalStatus, ApprovalStage, RevisionStatus } from '@prisma/client';
 import { approvalActionSchema } from './approval.schemas';
+import { uploadFileToS3 } from '../../services/s3.service';
+
+const STAGE_LABEL: Record<ApprovalStage, string> = {
+  VERIFICACAO: 'Verificação (Time Interno)',
+  APROVACAO: 'Aprovação (Coordenação)',
+  CLIENTE: 'Análise do Cliente',
+};
 
 export const getPendingApprovals = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.userId!;
-    
+
     const contractId = parseInt(req.query.contractId as string, 10);
     if (isNaN(contractId)) {
       res.status(400).json({ error: 'O contractId fornecido na requisição é inválido.' });
@@ -25,7 +32,6 @@ export const getPendingApprovals = async (req: AuthRequest, res: Response): Prom
       return;
     }
 
-    // A QUERY CORRIGIDA PARA O NEON DB: Exige o enum ApprovalStatus.PENDENTE em vez de string
     const pending = await prisma.approvalWorkflow.findMany({
       where: {
         status: ApprovalStatus.PENDENTE,
@@ -50,13 +56,17 @@ export const getPendingApprovals = async (req: AuthRequest, res: Response): Prom
       orderBy: { requestedAt: 'desc' }
     });
 
+    // PATCH 10.2: Expõe o estágio do carimbo (Verificação/Aprovação/Cliente)
     const formattedPending = pending.map(p => ({
       id: p.id,
       codigoDocumento: p.revision.document.codigoDocumento,
       revisao: p.revision.versionLabel,
       disciplina: p.revision.document.contractDiscipline?.nome ?? 'Não definida',
       solicitante: p.requester?.nome || 'Sistema',
-      dataSolicitacao: p.requestedAt.toISOString()
+      dataSolicitacao: p.requestedAt.toISOString(),
+      stage: p.stage,
+      stageLabel: STAGE_LABEL[p.stage],
+      isClient: p.isClient
     }));
 
     res.status(200).json(formattedPending);
@@ -66,19 +76,52 @@ export const getPendingApprovals = async (req: AuthRequest, res: Response): Prom
   }
 };
 
+/**
+ * PATCH 10.2 — MÁQUINA DE ESTADOS DE ENGENHARIA
+ *
+ * Cada carimbo do fluxo é um registro ApprovalWorkflow independente (histórico
+ * preservado, nunca sobrescrito). A transição depende do estágio (stage) do
+ * carimbo que está sendo decidido:
+ *
+ * ┌───────────────┬───────────────────────────────┬──────────────────────────────┐
+ * │ Estágio       │ APROVADO (limpo)              │ APROVADO_C/ COMENT. / REPROV │
+ * ├───────────────┼───────────────────────────────┼──────────────────────────────┤
+ * │ VERIFICACAO   │ Avança p/ Aprovação (Coord.)  │ Revisão Verificação (retorno)│
+ * │ APROVACAO     │ APROVADO — documento trava    │ Revisão Aprovação (retorno)  │
+ * │ CLIENTE       │ APROVADO final                │ Nova versão oficial exigida  │
+ * └───────────────┴───────────────────────────────┴──────────────────────────────┘
+ */
 export const handleApprovalAction = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.userId!;
-    
+
     const approvalId = parseInt(req.params.id as string, 10);
     if (isNaN(approvalId)) {
       res.status(400).json({ error: 'ID de aprovação inválido.' });
       return;
     }
 
-    // ÉPICO 10: Validação Zod — exige um dos status exatos do fluxo estrito
-    const parsed = approvalActionSchema.parse(req.body);
+    // PATCH 10.2: Payload via multipart/form-data (multer preenche req.body)
+    const parsed = approvalActionSchema.parse({
+      status: req.body.status,
+      comments: req.body.comments,
+    });
     const { status, comments } = parsed;
+
+    // ── Upload opcional do PDF comentado ──────────────────────────────────
+    // Só é permitido anexar arquivo nos carimbos que exigem retorno ao autor:
+    // APROVADO_COM_COMENTARIOS ou REPROVADO.
+    let commentedFileUrl: string | null = null;
+    if (req.file) {
+      if (status !== ApprovalStatus.APROVADO_COM_COMENTARIOS && status !== ApprovalStatus.REPROVADO) {
+        res.status(400).json({
+          error: 'O anexo de arquivo comentado só é permitido ao aprovar com comentários ou reprovar.',
+        });
+        return;
+      }
+      const { filePath } = await uploadFileToS3(req.file.buffer, req.file.originalname, req.file.mimetype);
+      commentedFileUrl = filePath;
+    }
 
     // Regras do motor estrito: comentário é obrigatório ao aprovar com comentários ou reprovar
     let actionComments: string | null = null;
@@ -96,12 +139,17 @@ export const handleApprovalAction = async (req: AuthRequest, res: Response): Pro
     }
 
     const actionWorkflow = status as ApprovalStatus;
-    const actionRevision =
-      status === ApprovalStatus.REPROVADO ? RevisionStatus.REJEITADO : RevisionStatus.APROVADO;
 
     const workflow = await prisma.approvalWorkflow.findUnique({
       where: { id: approvalId },
-      include: { revision: { include: { document: true } } }
+      include: {
+        revision: {
+          include: {
+            document: true,
+            approvalWorkflows: { orderBy: { requestedAt: 'asc' } }
+          }
+        }
+      }
     });
 
     if (!workflow) {
@@ -110,20 +158,11 @@ export const handleApprovalAction = async (req: AuthRequest, res: Response): Pro
     }
 
     if (workflow.status !== ApprovalStatus.PENDENTE) {
-      res.status(400).json({ error: 'Esta revisão já foi processada anteriormente.' });
+      res.status(400).json({ error: 'Este carimbo já foi processado anteriormente.' });
       return;
     }
 
     const contractId = workflow.revision.document.contractId;
-
-    const membership = await prisma.contractMembership.findUnique({
-      where: { userId_contractId: { userId, contractId } }
-    });
-
-    if (!membership || !['GESTOR', 'APROVADOR'].includes(membership.role)) {
-      res.status(403).json({ error: 'Acesso negado: Perfil insuficiente para realizar aprovações.' });
-      return;
-    }
 
     // ÉPICO 10: Identificação de ator — membros externos (Cliente) marcados com isClient
     const actor = await prisma.user.findUnique({
@@ -132,24 +171,104 @@ export const handleApprovalAction = async (req: AuthRequest, res: Response): Pro
     });
     const isClient = actor?.isClient ?? false;
 
-    // A CORREÇÃO: Sintaxe Relacional (Checked Input) permite a transação aninhada perfeita!
-    await prisma.approvalWorkflow.update({
-      where: { id: approvalId },
-      data: {
-        status: actionWorkflow,
-        reviewer: { connect: { id: userId } }, // <-- O SEGREDO ESTÁ AQUI
-        reviewedAt: new Date(),
-        comments: actionComments,
-        isClient: isClient,
-        revision: {
-          update: {
-            status: actionRevision
-          }
+    const membership = await prisma.contractMembership.findUnique({
+      where: { userId_contractId: { userId, contractId } }
+    });
+
+    // ── GATEKEEPER POR ESTÁGIO (PATCH 10.2) ──────────────────────────────
+    // Análise do Cliente: SOMENTE o ator externo (isClient: true) responde.
+    // Carimbos internos (Verificação/Coordenação): somente GESTOR/APROVADOR do Time.
+    const stage = workflow.stage;
+
+    if (stage === ApprovalStage.CLIENTE) {
+      // Isolamento multi-tenant: o Cliente precisa ser membro do contrato do documento
+      if (!isClient) {
+        res.status(403).json({
+          error: 'Acesso negado: apenas o Cliente pode responder à Análise pós-emissão.',
+        });
+        return;
+      }
+      if (!membership) {
+        res.status(403).json({ error: 'Acesso negado: você não é membro deste contrato.' });
+        return;
+      }
+    } else {
+      if (!membership || !['GESTOR', 'APROVADOR'].includes(membership.role) || isClient) {
+        res.status(403).json({
+          error: 'Acesso negado: Perfil insuficiente para realizar esta aprovação interna.',
+        });
+        return;
+      }
+    }
+
+    // ── TRANSIÇÃO DE ESTADO DA MÁQUINA ────────────────────────────────────
+    // Define o novo status da revisão e se um próximo carimbo deve ser criado
+    // (nunca sobrescreve o carimbo atual: cada transição cria um registro novo).
+    let nextRevisionStatus: RevisionStatus = workflow.revision.status;
+    let nextStage: ApprovalStage | null = null;
+
+    if (stage === ApprovalStage.VERIFICACAO) {
+      if (status === ApprovalStatus.APROVADO) {
+        // Verificação limpa → avança para o Carimbo 2 (Coordenação)
+        nextRevisionStatus = RevisionStatus.EM_REVISAO;
+        nextStage = ApprovalStage.APROVACAO;
+      } else {
+        // Retorno ao autor → Revisão Verificação
+        nextRevisionStatus = RevisionStatus.REJEITADO;
+      }
+    } else if (stage === ApprovalStage.APROVACAO) {
+      if (status === ApprovalStatus.APROVADO) {
+        // Coordenação aprovou limpo → documento trava, aguardando GRD
+        nextRevisionStatus = RevisionStatus.APROVADO;
+      } else {
+        // Retorno ao autor → Revisão Aprovação
+        nextRevisionStatus = RevisionStatus.REJEITADO;
+      }
+    } else {
+      // CLIENTE — avaliação final pós-emissão
+      if (status === ApprovalStatus.APROVADO) {
+        nextRevisionStatus = RevisionStatus.APROVADO;
+      } else {
+        // Aprovado com comentários ou reprovado → exige nova versão oficial
+        nextRevisionStatus = RevisionStatus.REJEITADO;
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.approvalWorkflow.update({
+        where: { id: approvalId },
+        data: {
+          status: actionWorkflow,
+          reviewer: { connect: { id: userId } },
+          reviewedAt: new Date(),
+          comments: actionComments,
+          commentedFileUrl: commentedFileUrl,
+          isClient: isClient,
         }
+      });
+
+      await tx.revision.update({
+        where: { id: workflow.revisionId },
+        data: { status: nextRevisionStatus }
+      });
+
+      // Gera o próximo carimbo PENDENTE (novo registro — histórico preservado)
+      if (nextStage) {
+        await tx.approvalWorkflow.create({
+          data: {
+            revisionId: workflow.revisionId,
+            requesterId: workflow.requesterId,
+            stage: nextStage,
+            status: ApprovalStatus.PENDENTE,
+          }
+        });
       }
     });
 
-    res.status(200).json({ message: `Documento processado como ${status} com sucesso.` });
+    res.status(200).json({
+      message: `Documento processado como ${status} com sucesso.`,
+      stage: stage,
+    });
   } catch (error: any) {
     if (error?.name === 'ZodError') {
       res.status(400).json({ error: error.issues?.map((i: any) => i.message).join('; ') || 'Payload inválido.' });

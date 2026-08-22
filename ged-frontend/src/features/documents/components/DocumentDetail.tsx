@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { documentService } from '../services/document.service';
-import type { DocumentDetail, RevisionDetail, TransmittalItemDetail } from '../types/document.types';
+import type { DocumentDetail, RevisionDetail, TransmittalItemDetail, ApprovalWorkflowDetail } from '../types/document.types';
 import { DocumentViewer } from './DocumentViewer';
 import { RevisionUploadForm } from './RevisionUploadForm';
 import { TimesheetForm } from './TimesheetForm';
 import { TimesheetList } from './TimesheetList';
 import { useTimesheet } from '../hooks/useTimesheet';
 import { WorkflowFlowchart, getWorkflowStageIndex } from './WorkflowFlowchart';
+import { useAuth } from '../../../contexts/AuthContext';
+import type { ApprovalStatus } from '../../../types/prisma-types';
 import {
   ChevronLeft,
   FileText,
@@ -28,15 +30,53 @@ import {
   Loader2,
   UploadCloud,
   Copy,
-  FileCode,
   Building2,
   History,
   Hourglass,
   PlusCircle,
   Workflow,
-  ChevronDown,
   MessageSquare,
+  Paperclip,
 } from 'lucide-react';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATCH 10.2: Estágios da Máquina de Estados (rótulos dos carimbos)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const STAGE_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
+  VERIFICACAO: { label: 'Verificação (Time Interno)', bg: 'bg-sky-100', text: 'text-sky-800' },
+  APROVACAO: { label: 'Aprovação (Coordenação)', bg: 'bg-violet-100', text: 'text-violet-800' },
+  CLIENTE: { label: 'Análise do Cliente', bg: 'bg-orange-100', text: 'text-orange-800' },
+};
+
+function StageBadge({ stage }: { stage: string }) {
+  const cfg = STAGE_CONFIG[stage] ?? { label: stage, bg: 'bg-gray-100', text: 'text-gray-700' };
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 ${cfg.bg} ${cfg.text} text-[10px] font-bold rounded-full uppercase tracking-wide`}>
+      {cfg.label}
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATCH 10.2: GATEKEEPER DE NOVA REVISÃO (espelho do backend)
+// A nova revisão só é desbloqueada após o ciclo de Análise do Cliente concluído
+// ou quando o fluxo reprova e exige uma nova versão oficial.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function canCreateNewRevision(revision: RevisionDetail): boolean {
+  const approvals = revision.approvalWorkflows ?? [];
+  const hasOpenPending = approvals.some((a) => a.status === 'PENDENTE');
+
+  const clientApprovals = approvals.filter((a) => a.stage === 'CLIENTE');
+  const clientCycleDone =
+    clientApprovals.length > 0 && clientApprovals.every((a) => a.status !== 'PENDENTE');
+
+  const needsNewOfficialVersion = revision.status === 'REJEITADO';
+  const legacyWithoutApprovals = approvals.length === 0 && revision.status === 'APROVADO';
+
+  return !hasOpenPending && (clientCycleDone || needsNewOfficialVersion || legacyWithoutApprovals);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-component: OCR Status Badge
@@ -222,6 +262,241 @@ function TransmittalReferenceList({ transmittalItems }: TransmittalReferenceList
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Sub-component: Approval History Entry (PATCH 10.2)
+// Um carimbo (Verificação → Aprovação → Análise do Cliente) renderizado como
+// entrada cronológica da Linha do Tempo. O histórico NUNCA é sobrescrito.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface ApprovalHistoryEntryProps {
+  approval: ApprovalWorkflowDetail;
+  canAct: boolean;
+  showDecisionForm: boolean;
+  actionError: string | null;
+  actionStatus: Exclude<ApprovalStatus, 'PENDENTE'> | null;
+  actionComments: string;
+  actionFile: File | null;
+  isSubmitting: boolean;
+  onSelectStatus: (status: Exclude<ApprovalStatus, 'PENDENTE'>) => void;
+  onCancel: () => void;
+  onCommentsChange: (value: string) => void;
+  onFileChange: (file: File | null) => void;
+  onSubmit: () => void;
+}
+
+function ApprovalHistoryEntry({
+  approval,
+  canAct,
+  showDecisionForm,
+  actionError,
+  actionStatus,
+  actionComments,
+  actionFile,
+  isSubmitting,
+  onSelectStatus,
+  onCancel,
+  onCommentsChange,
+  onFileChange,
+  onSubmit,
+}: ApprovalHistoryEntryProps) {
+  const isPending = approval.status === 'PENDENTE';
+
+  return (
+    <div className="p-3 border border-gray-200 rounded-lg bg-white">
+      {/* Cabeçalho do Carimbo */}
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <StageBadge stage={approval.stage} />
+        {approval.status === 'APROVADO' && (
+          <span className="inline-flex items-center gap-1 text-emerald-700 text-xs font-medium">
+            <CheckCircle2 className="w-3.5 h-3.5" /> Aprovado
+          </span>
+        )}
+        {approval.status === 'APROVADO_COM_COMENTARIOS' && (
+          <span className="inline-flex items-center gap-1 text-emerald-700 text-xs font-medium">
+            <MessageSquare className="w-3.5 h-3.5" /> Aprovado com Comentários
+          </span>
+        )}
+        {approval.status === 'REPROVADO' && (
+          <span className="inline-flex items-center gap-1 text-red-700 text-xs font-medium">
+            <XCircle className="w-3.5 h-3.5" /> Reprovado
+          </span>
+        )}
+        {isPending && (
+          <span className="inline-flex items-center gap-1 text-amber-700 text-xs font-medium">
+            <Clock className="w-3.5 h-3.5" /> Pendente
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div>
+          <span className="text-gray-500 font-medium">Solicitante:</span>
+          <span className="text-gray-800 ml-1">{approval.requester?.nome || 'Sistema'}</span>
+        </div>
+        <div>
+          <span className="text-gray-500 font-medium">Aprovador:</span>
+          <span className="text-gray-800 ml-1 inline-flex items-center gap-1.5">
+            {approval.reviewer?.nome || 'Aguardando análise'}
+            {approval.reviewer && <ActorBadge isClient={approval.isClient} />}
+          </span>
+        </div>
+        <div>
+          <span className="text-gray-500 font-medium">Data Solicitação:</span>
+          <span className="text-gray-800 ml-1">
+            {new Date(approval.requestedAt).toLocaleDateString('pt-BR')}
+          </span>
+        </div>
+        {approval.reviewedAt && (
+          <div>
+            <span className="text-gray-500 font-medium">Data Análise:</span>
+            <span className="text-gray-800 ml-1">
+              {new Date(approval.reviewedAt).toLocaleDateString('pt-BR')}
+            </span>
+          </div>
+        )}
+        {approval.comments && (
+          <div className="col-span-2">
+            <span className="text-gray-500 font-medium flex items-center gap-1.5">
+              {approval.status === 'REPROVADO' ? 'Justificativa:' : 'Comentários:'}
+              <ActorBadge isClient={approval.isClient} />
+            </span>
+            <p
+              className={`
+                text-gray-800 mt-1 p-2 rounded border text-xs whitespace-pre-wrap
+                ${
+                  approval.isClient
+                    ? 'bg-orange-50 border-orange-200'
+                    : 'bg-blue-50 border-blue-200'
+                }
+              `}
+            >
+              {approval.comments}
+            </p>
+          </div>
+        )}
+
+        {/* PATCH 10.2: Arquivo Comentado anexado na análise */}
+        {approval.commentedFileUrl && (
+          <div className="col-span-2">
+            <span className="text-gray-500 font-medium flex items-center gap-1.5">
+              <Paperclip className="w-3.5 h-3.5" />
+              Arquivo Comentado
+            </span>
+            <a
+              href={approval.commentedFileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+              className="mt-1 inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 rounded-md text-xs font-medium transition-colors"
+              title="Baixar arquivo comentado"
+            >
+              <Paperclip className="w-3.5 h-3.5" />
+              Baixar Arquivo Comentado
+            </a>
+          </div>
+        )}
+      </div>
+
+      {/* PATCH 10.2: Painel de Decisão (só quando o carimbo está PENDENTE e o
+          usuário tem permissão para agir naquele estágio) */}
+      {isPending && canAct && (
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          {actionError && (
+            <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2 text-xs">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>{actionError}</span>
+            </div>
+          )}
+
+          {!showDecisionForm ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => onSelectStatus('APROVADO')}
+                disabled={isSubmitting}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 rounded-lg text-xs font-medium transition-colors"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Aprovar
+              </button>
+              <button
+                onClick={() => onSelectStatus('APROVADO_COM_COMENTARIOS')}
+                disabled={isSubmitting}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-60 rounded-lg text-xs font-medium transition-colors"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                Aprovar com Comentários
+              </button>
+              <button
+                onClick={() => onSelectStatus('REPROVADO')}
+                disabled={isSubmitting}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 rounded-lg text-xs font-medium transition-colors"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                Reprovar
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">
+                  {actionStatus === 'REPROVADO'
+                    ? 'Justificativa técnica (obrigatória)'
+                    : 'Comentário técnico (obrigatório)'}
+                </label>
+                <textarea
+                  value={actionComments}
+                  onChange={(e) => onCommentsChange(e.target.value)}
+                  rows={3}
+                  maxLength={2000}
+                  placeholder="Registre o retorno técnico desta análise..."
+                  className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                />
+              </div>
+
+              {/* PATCH 10.2: Anexo do PDF Comentado (apenas c/ comentários ou reprovação) */}
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">
+                  Arquivo comentado (PDF) <span className="text-gray-400">— opcional</span>
+                </label>
+                <input
+                  type="file"
+                  accept=".pdf,.PDF"
+                  onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
+                  className="block w-full text-xs text-gray-500 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
+                />
+                {actionFile && (
+                  <p className="mt-1 text-xs text-gray-500 flex items-center gap-1">
+                    <Paperclip className="w-3 h-3" />
+                    {actionFile.name}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={onSubmit}
+                  disabled={isSubmitting || (actionStatus !== 'APROVADO' && !actionComments.trim())}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 rounded-lg text-xs font-medium transition-colors"
+                >
+                  {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                  Confirmar {actionStatus === 'REPROVADO' ? 'Reprovação' : 'Aprovação'}
+                </button>
+                <button
+                  onClick={onCancel}
+                  disabled={isSubmitting}
+                  className="px-3 py-2 text-xs text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Sub-component: Revision Card
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -230,30 +505,64 @@ interface RevisionCardProps {
   isLatest: boolean;
   canUpload: boolean;
   canApprove: boolean;
+  isClientUser: boolean;
   codigoDocumento: string;
   onPreview: (revision: RevisionDetail) => void;
   onUploadSuccess: () => void;
   onApproved: () => void;
 }
 
-function RevisionCard({ revision, isLatest, canUpload, canApprove, codigoDocumento, onPreview, onUploadSuccess, onApproved }: RevisionCardProps) {
+function RevisionCard({ revision, isLatest, canUpload, canApprove, isClientUser, codigoDocumento, onPreview, onUploadSuccess, onApproved }: RevisionCardProps) {
   const [isRevModalOpen, setIsRevModalOpen] = useState(false);
-  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+  const [actionFor, setActionFor] = useState<number | null>(null);
+  const [actionStatus, setActionStatus] = useState<Exclude<ApprovalStatus, 'PENDENTE'> | null>(null);
+  const [actionComments, setActionComments] = useState('');
+  const [actionFile, setActionFile] = useState<File | null>(null);
   const [isActionSubmitting, setIsActionSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const workflow = revision.approvalWorkflow;
+  const workflows = revision.approvalWorkflows ?? [];
+  const pendingApproval = workflows.find((w) => w.status === 'PENDENTE') ?? null;
+
+  // PATCH 10.2: RBAC por estágio — o Cliente só age no carimbo CLIENTE;
+  // o Time (GESTOR/APROVADOR) age nos carimbos internos.
+  const canActOnPending =
+    !!pendingApproval &&
+    (pendingApproval.stage === 'CLIENTE' ? isClientUser : canApprove && !isClientUser);
+
+  const resetAction = () => {
+    setActionFor(null);
+    setActionStatus(null);
+    setActionComments('');
+    setActionFile(null);
+    setActionError(null);
+  };
+
+  const handleSelectStatus = (status: Exclude<ApprovalStatus, 'PENDENTE'>) => {
+    if (!pendingApproval) return;
+
+    // Aprovação limpa — ação imediata, sem formulário de comentários/anexo
+    if (status === 'APROVADO') {
+      void runApprovalAction(pendingApproval.id, 'APROVADO');
+      return;
+    }
+
+    setActionFor(pendingApproval.id);
+    setActionStatus(status);
+    setActionError(null);
+  };
 
   const runApprovalAction = async (
-    status: 'APROVADO' | 'APROVADO_COM_COMENTARIOS' | 'REPROVADO',
-    comments?: string
+    approvalId: number,
+    status: Exclude<ApprovalStatus, 'PENDENTE'>,
+    comments?: string,
+    file?: File | null
   ) => {
-    if (!workflow) return;
     try {
       setIsActionSubmitting(true);
       setActionError(null);
-      await documentService.approveRevision(workflow.id, status, comments);
-      setIsActionMenuOpen(false);
+      await documentService.approveRevision(approvalId, status, comments, file ?? undefined);
+      resetAction();
       onApproved();
     } catch (error: unknown) {
       const message =
@@ -266,29 +575,27 @@ function RevisionCard({ revision, isLatest, canUpload, canApprove, codigoDocumen
     }
   };
 
-  const handleApproveClean = async () => {
-    await runApprovalAction('APROVADO');
-  };
-
-  const handleApproveWithComments = async () => {
-    const comments = window.prompt('Registre o(s) comentário(s) técnico(s) desta aprovação:');
-    if (comments === null) return;
-    if (!comments.trim()) {
-      window.alert('Ação cancelada: É obrigatório fornecer um comentário ao aprovar com comentários.');
+  const handleSubmitAction = async () => {
+    if (!pendingApproval) return;
+    if (actionStatus !== 'APROVADO' && !actionComments.trim()) {
+      setActionError(
+        actionStatus === 'REPROVADO'
+          ? 'Justificativa técnica é obrigatória ao reprovar.'
+          : 'O comentário é obrigatório ao aprovar com comentários.'
+      );
       return;
     }
-    await runApprovalAction('APROVADO_COM_COMENTARIOS', comments.trim());
+    await runApprovalAction(
+      pendingApproval.id,
+      actionStatus ?? 'APROVADO',
+      actionComments.trim() || undefined,
+      actionFile ?? undefined
+    );
   };
 
-  const handleReprove = async () => {
-    const comments = window.prompt('Introduza obrigatoriamente a justificativa técnica para reprovar este documento:');
-    if (comments === null) return;
-    if (!comments.trim()) {
-      window.alert('Ação cancelada: É obrigatório fornecer uma justificativa para reprovar o arquivo.');
-      return;
-    }
-    await runApprovalAction('REPROVADO', comments.trim());
-  };
+  // GATEKEEPER DE NOVA REVISÃO (frontend): o botão só desbloqueia quando o
+  // ciclo de Análise do Cliente está concluído ou o fluxo reprovou.
+  const isNewRevisionUnlocked = canCreateNewRevision(revision);
 
   return (
     <>
@@ -356,154 +663,50 @@ function RevisionCard({ revision, isLatest, canUpload, canApprove, codigoDocumen
             </div>
           </div>
 
-          {/* Approval Workflow */}
-          {revision.approvalWorkflow && (
+          {/* PATCH 10.2: Histórico de Aprovações — Máquina de Estados.
+              Todas as idas e vindas (Verificação → Aprovação → Cliente) são
+              exibidas cronologicamente, cada carimbo como um registro novo. */}
+          {workflows.length > 0 && (
             <div className="p-3 border border-gray-200 rounded-lg bg-white">
-              <div className="flex items-center gap-2 mb-2">
-                <FileCode className="w-4 h-4 text-purple-600" />
-                <h4 className="font-semibold text-gray-800 text-sm">Workflow de Aprovação</h4>
+              <div className="flex items-center gap-2 mb-3">
+                <Workflow className="w-4 h-4 text-purple-600" />
+                <h4 className="font-semibold text-gray-800 text-sm">
+                  Máquina de Estados — Histórico de Carimbos
+                </h4>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <span className="text-gray-500 font-medium">Solicitante:</span>
-                  <span className="text-gray-800 ml-1">
-                    {revision.approvalWorkflow.requester?.nome || 'Sistema'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500 font-medium">Status:</span>
-                  <span className="ml-1">
-                    {revision.approvalWorkflow.status === 'APROVADO' && (
-                      <span className="inline-flex items-center gap-1 text-emerald-700">
-                        <CheckCircle2 className="w-3 h-3" /> Aprovado
-                      </span>
-                    )}
-                    {revision.approvalWorkflow.status === 'APROVADO_COM_COMENTARIOS' && (
-                      <span className="inline-flex items-center gap-1 text-emerald-700">
-                        <MessageSquare className="w-3 h-3" /> Aprovado com Comentários
-                      </span>
-                    )}
-                    {revision.approvalWorkflow.status === 'REPROVADO' && (
-                      <span className="inline-flex items-center gap-1 text-red-700">
-                        <XCircle className="w-3 h-3" /> Reprovado
-                      </span>
-                    )}
-                    {revision.approvalWorkflow.status === 'PENDENTE' && (
-                      <span className="inline-flex items-center gap-1 text-amber-700">
-                        <Clock className="w-3 h-3" /> Pendente
-                      </span>
-                    )}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500 font-medium">Aprovador:</span>
-                  <span className="text-gray-800 ml-1 inline-flex items-center gap-1.5">
-                    {revision.approvalWorkflow.reviewer?.nome || 'Aguardando análise'}
-                    {revision.approvalWorkflow.reviewer && (
-                      <ActorBadge isClient={revision.approvalWorkflow.isClient} />
-                    )}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-gray-500 font-medium">Data Solicitação:</span>
-                  <span className="text-gray-800 ml-1">
-                    {new Date(revision.approvalWorkflow.requestedAt).toLocaleDateString('pt-BR')}
-                  </span>
-                </div>
-                {revision.approvalWorkflow.reviewedAt && (
-                  <div>
-                    <span className="text-gray-500 font-medium">Data Análise:</span>
-                    <span className="text-gray-800 ml-1">
-                      {new Date(revision.approvalWorkflow.reviewedAt).toLocaleDateString('pt-BR')}
-                    </span>
-                  </div>
-                )}
-                {revision.approvalWorkflow.comments && (
-                  <div className="col-span-2">
-                    <span className="text-gray-500 font-medium flex items-center gap-1.5">
-                      {revision.approvalWorkflow.status === 'REPROVADO' ? 'Justificativa:' : 'Comentários:'}
-                      <ActorBadge isClient={revision.approvalWorkflow.isClient} />
-                    </span>
-                    <p
-                      className={`
-                        text-gray-800 mt-1 p-2 rounded border text-xs
-                        ${
-                          revision.approvalWorkflow.isClient
-                            ? 'bg-orange-50 border-orange-200'
-                            : 'bg-blue-50 border-blue-200'
-                        }
-                      `}
-                    >
-                      {revision.approvalWorkflow.comments}
-                    </p>
-                  </div>
-                )}
+              <div className="space-y-3">
+                {workflows.map((approval) => {
+                  const isPendingTarget = pendingApproval?.id === approval.id;
+                  return (
+                    <ApprovalHistoryEntry
+                      key={approval.id}
+                      approval={approval}
+                      canAct={isPendingTarget && canActOnPending}
+                      showDecisionForm={
+                        isPendingTarget &&
+                        canActOnPending &&
+                        actionFor === approval.id &&
+                        actionStatus !== null
+                      }
+                      actionError={actionError}
+                      actionStatus={actionStatus}
+                      actionComments={actionComments}
+                      actionFile={actionFile}
+                      isSubmitting={isActionSubmitting}
+                      onSelectStatus={handleSelectStatus}
+                      onCancel={resetAction}
+                      onCommentsChange={setActionComments}
+                      onFileChange={setActionFile}
+                      onSubmit={handleSubmitAction}
+                    />
+                  );
+                })}
               </div>
-
-              {/* ÉPICO 10: Ações exatas do Motor de Aprovação Estrito */}
-              {revision.approvalWorkflow.status === 'PENDENTE' && canApprove && (
-                <div className="mt-3 pt-3 border-t border-gray-100">
-                  {actionError && (
-                    <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2 text-xs">
-                      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                      <span>{actionError}</span>
-                    </div>
-                  )}
-
-                  <div className="relative inline-block">
-                    <button
-                      onClick={() => setIsActionMenuOpen(open => !open)}
-                      disabled={isActionSubmitting}
-                      className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 rounded-lg text-sm font-medium transition-colors shadow-sm"
-                    >
-                      {isActionSubmitting ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <CheckCircle className="w-4 h-4" />
-                      )}
-                      Decidir Revisão
-                      <ChevronDown
-                        className={`w-4 h-4 transition-transform ${isActionMenuOpen ? 'rotate-180' : ''}`}
-                      />
-                    </button>
-
-                    {isActionMenuOpen && (
-                      <div className="absolute left-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50">
-                        <button
-                          onClick={handleApproveClean}
-                          disabled={isActionSubmitting}
-                          className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-800 flex items-center gap-2 disabled:opacity-60"
-                        >
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                          Aprovar sem comentários
-                        </button>
-                        <button
-                          onClick={handleApproveWithComments}
-                          disabled={isActionSubmitting}
-                          className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-800 flex items-center gap-2 disabled:opacity-60"
-                        >
-                          <MessageSquare className="w-4 h-4 text-amber-600" />
-                          Aprovar com comentários
-                        </button>
-                        <div className="border-t border-gray-100 my-1"></div>
-                        <button
-                          onClick={handleReprove}
-                          disabled={isActionSubmitting}
-                          className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-800 flex items-center gap-2 disabled:opacity-60"
-                        >
-                          <XCircle className="w-4 h-4 text-red-600" />
-                          Reprovar
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
-          {/* Transmittal References */}
+          {/* Guias de Remessa (GRD) — ÉPICO 10.1 */}
           {revision.transmittalItems.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-2">
@@ -522,7 +725,13 @@ function RevisionCard({ revision, isLatest, canUpload, canApprove, codigoDocumen
           <div className="p-3 border-t border-gray-100 bg-gray-50 flex justify-end rounded-b-xl">
             <button
               onClick={() => setIsRevModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
+              disabled={!isNewRevisionUnlocked}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+              title={
+                isNewRevisionUnlocked
+                  ? 'Subir nova revisão do documento'
+                  : 'Bloqueado: aguarde a conclusão do ciclo de Análise do Cliente ou a reprovação do fluxo.'
+              }
             >
               <UploadCloud className="w-4 h-4" />
               Subir Nova Revisão
@@ -691,6 +900,10 @@ export function DocumentDetail() {
   // ÉPICO 10: Modal do Fluxograma Visual
   const [isFlowOpen, setIsFlowOpen] = useState(false);
 
+  // PATCH 10.2: Ator autenticado (para a Análise do Cliente pós-emissão)
+  const { user } = useAuth();
+  const isClientUser = user?.isClient ?? false;
+
   const rawId = routeDocumentId ?? id;
   const documentId = Number(rawId);
   const canUpload = document?.userRole === 'GESTOR' || document?.userRole === 'ENGENHEIRO';
@@ -812,7 +1025,7 @@ export function DocumentDetail() {
           <button
             onClick={() => setIsFlowOpen(true)}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 rounded-lg font-medium transition-colors"
-            title="Visualizar o fluxograma do fluxo de aprovação"
+            title="Visualizar a Máquina de Estados do fluxo de aprovação"
           >
             <Workflow className="w-4 h-4" />
             Visualizar Fluxo
@@ -858,6 +1071,7 @@ export function DocumentDetail() {
                 isLatest={index === document.revisions.length - 1}
                 canUpload={canUpload}
                 canApprove={canApprove}
+                isClientUser={isClientUser}
                 codigoDocumento={document.codigoDocumento}
                 onPreview={handlePreview}
                 onUploadSuccess={fetchDocument}
@@ -903,19 +1117,14 @@ export function DocumentDetail() {
         </div>
       </div>
 
-      {/* ÉPICO 10: Fluxograma Visual Interativo */}
+      {/* PATCH 10.2: Fluxograma Visual Interativo (Máquina de Estados) */}
       <WorkflowFlowchart
         isOpen={isFlowOpen}
         onClose={() => setIsFlowOpen(false)}
         currentStage={getWorkflowStageIndex(latestRevision)}
         codigoDocumento={document.codigoDocumento}
         versionLabel={latestRevision?.versionLabel}
-        isEmitted={
-          !!latestRevision &&
-          latestRevision.status === 'APROVADO' &&
-          latestRevision.approvalWorkflow?.status === 'APROVADO' &&
-          latestRevision.transmittalItems.length > 0
-        }
+        isEmitted={!!latestRevision && latestRevision.transmittalItems.length > 0}
       />
 
       {/* Document Viewer Modal (reutiliza componente existente) */}

@@ -41,7 +41,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     res.status(200).json({
       message: 'Login bem-sucedido',
       token,
-      user: { id: user.id, nome: user.nome, email: user.email, role: user.globalRole }
+      // PATCH 10.2: isClient exposto para a UI habilitar a Análise do Cliente pós-emissão
+      user: { id: user.id, nome: user.nome, email: user.email, role: user.globalRole, isClient: user.isClient }
     });
   } catch (error) {
     console.error('[GED Engenharia] Erro no login:', error);
