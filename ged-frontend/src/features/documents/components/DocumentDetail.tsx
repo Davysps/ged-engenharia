@@ -9,6 +9,7 @@ import { TimesheetForm } from './TimesheetForm';
 import { TimesheetList } from './TimesheetList';
 import { useTimesheet } from '../hooks/useTimesheet';
 import { WorkflowFlowchart, getWorkflowStageIndex } from './WorkflowFlowchart';
+import { InternalCorrectionForm } from './InternalCorrectionForm';
 import { useAuth } from '../../../contexts/AuthContext';
 import type { ApprovalStatus } from '../../../types/prisma-types';
 import {
@@ -30,6 +31,7 @@ import {
   Loader2,
   UploadCloud,
   Copy,
+  Repeat,
   Building2,
   History,
   Hourglass,
@@ -59,9 +61,10 @@ function StageBadge({ stage }: { stage: string }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PATCH 10.2: GATEKEEPER DE NOVA REVISÃO (espelho do backend)
-// A nova revisão só é desbloqueada após o ciclo de Análise do Cliente concluído
-// ou quando o fluxo reprova e exige uma nova versão oficial.
+// PATCH 10.3: GATEKEEPER DE NOVA REVISÃO OFICIAL (espelho do backend)
+// PREMISSA MÁXIMA: Retrabalho Interno ≠ Revisão Oficial. A R+1 só nasce após
+// o ciclo de Análise do Cliente ser concluído. Reprovações internas NÃO
+// desbloqueiam nova revisão — o retrabalho usa a Correção Interna.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function canCreateNewRevision(revision: RevisionDetail): boolean {
@@ -72,10 +75,40 @@ export function canCreateNewRevision(revision: RevisionDetail): boolean {
   const clientCycleDone =
     clientApprovals.length > 0 && clientApprovals.every((a) => a.status !== 'PENDENTE');
 
-  const needsNewOfficialVersion = revision.status === 'REJEITADO';
   const legacyWithoutApprovals = approvals.length === 0 && revision.status === 'APROVADO';
 
-  return !hasOpenPending && (clientCycleDone || needsNewOfficialVersion || legacyWithoutApprovals);
+  return !hasOpenPending && (clientCycleDone || legacyWithoutApprovals);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATCH 10.3: Modo de ação do rodapé do card (botão dinâmico por estágio)
+// CENÁRIO A — Retrabalho Interno: estágio "Revisão Verificação" ou
+//   "Revisão Aprovação" → Enviar Correção Interna (mantém R atual).
+// CENÁRIO B — Retorno do Cliente: ciclo da Análise do Cliente concluído
+//   (REPROVADO / APROVADO_COM_COMENTARIOS) → Nova Revisão Oficial (R+1).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type RevisionFooterMode = 'INTERNAL_REWORK' | 'NEW_OFFICIAL_REVISION' | 'LOCKED';
+
+export function getRevisionFooterMode(revision: RevisionDetail): RevisionFooterMode {
+  const stageIndex = getWorkflowStageIndex(revision);
+
+  // Etapas 2 e 4 do fluxograma: retorno interno ao autor (retrabalho)
+  if (stageIndex === 2 || stageIndex === 4) {
+    return 'INTERNAL_REWORK';
+  }
+
+  if (canCreateNewRevision(revision)) {
+    return 'NEW_OFFICIAL_REVISION';
+  }
+
+  return 'LOCKED';
+}
+
+// PATCH 10.3: Rótulo da próxima revisão oficial (espelho do backend: R(n) → R(n+1))
+function getNextVersionLabel(currentLabel: string): string {
+  const match = currentLabel.match(/R(\d+)/i);
+  return match && match[1] ? `R${parseInt(match[1], 10) + 1}` : `${currentLabel}+`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -514,6 +547,8 @@ interface RevisionCardProps {
 
 function RevisionCard({ revision, isLatest, canUpload, canApprove, isClientUser, codigoDocumento, onPreview, onUploadSuccess, onApproved }: RevisionCardProps) {
   const [isRevModalOpen, setIsRevModalOpen] = useState(false);
+  // PATCH 10.3: Modal da Correção Interna (retrabalho sem gerar R+1)
+  const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
   const [actionFor, setActionFor] = useState<number | null>(null);
   const [actionStatus, setActionStatus] = useState<Exclude<ApprovalStatus, 'PENDENTE'> | null>(null);
   const [actionComments, setActionComments] = useState('');
@@ -524,8 +559,10 @@ function RevisionCard({ revision, isLatest, canUpload, canApprove, isClientUser,
   const workflows = revision.approvalWorkflows ?? [];
   const pendingApproval = workflows.find((w) => w.status === 'PENDENTE') ?? null;
 
-  // PATCH 10.2: RBAC por estágio — o Cliente só age no carimbo CLIENTE;
-  // o Time (GESTOR/APROVADOR) age nos carimbos internos.
+  // PATCH 10.2/10.3: RBAC por estágio — INTERFACE DO CLIENTE.
+  // A caixa "Decidir Revisão" no carimbo CLIENTE só aparece habilitada para
+  // usuários externos (isClient === true). O Time interno (GESTOR/APROVADOR)
+  // decide apenas os carimbos internos (Verificação/Coordenação).
   const canActOnPending =
     !!pendingApproval &&
     (pendingApproval.stage === 'CLIENTE' ? isClientUser : canApprove && !isClientUser);
@@ -593,9 +630,10 @@ function RevisionCard({ revision, isLatest, canUpload, canApprove, isClientUser,
     );
   };
 
-  // GATEKEEPER DE NOVA REVISÃO (frontend): o botão só desbloqueia quando o
-  // ciclo de Análise do Cliente está concluído ou o fluxo reprovou.
-  const isNewRevisionUnlocked = canCreateNewRevision(revision);
+  // PATCH 10.3: Botão dinâmico do rodapé conforme o estágio da Máquina de Estados.
+  const footerMode = getRevisionFooterMode(revision);
+  const isNewRevisionUnlocked = footerMode === 'NEW_OFFICIAL_REVISION';
+  const nextVersionLabel = getNextVersionLabel(revision.versionLabel);
 
   return (
     <>
@@ -720,31 +758,55 @@ function RevisionCard({ revision, isLatest, canUpload, canApprove, isClientUser,
           )}
         </div>
 
-        {/* Footer: Ações da Revisão */}
-        {isLatest && canUpload && (
+        {/* Footer: Ações da Revisão — PATCH 10.3 (botão dinâmico por estágio) */}
+        {isLatest && canUpload && footerMode !== 'LOCKED' && (
           <div className="p-3 border-t border-gray-100 bg-gray-50 flex justify-end rounded-b-xl">
-            <button
-              onClick={() => setIsRevModalOpen(true)}
-              disabled={!isNewRevisionUnlocked}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
-              title={
-                isNewRevisionUnlocked
-                  ? 'Subir nova revisão do documento'
-                  : 'Bloqueado: aguarde a conclusão do ciclo de Análise do Cliente ou a reprovação do fluxo.'
-              }
-            >
-              <UploadCloud className="w-4 h-4" />
-              Subir Nova Revisão
-            </button>
+            {footerMode === 'INTERNAL_REWORK' ? (
+              /* CENÁRIO A — Retrabalho Interno: corrige DENTRO da mesma revisão */
+              <button
+                onClick={() => setIsCorrectionModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium rounded-lg transition-colors"
+                title="Substitui o PDF da revisão atual e reinicia o ciclo interno de Verificação. Nenhuma nova revisão oficial é gerada."
+              >
+                <Repeat className="w-4 h-4" />
+                Enviar Correção Interna (Manter {revision.versionLabel} atual)
+              </button>
+            ) : (
+              /* CENÁRIO B — Retorno do Cliente: gera a próxima revisão oficial */
+              <button
+                onClick={() => setIsRevModalOpen(true)}
+                disabled={!isNewRevisionUnlocked}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+                title={
+                  isNewRevisionUnlocked
+                    ? `Cria a revisão oficial ${nextVersionLabel} do documento`
+                    : 'Bloqueado: a nova revisão oficial só nasce após a conclusão da Análise do Cliente.'
+                }
+              >
+                <UploadCloud className="w-4 h-4" />
+                Subir Nova Revisão Oficial (Gerar {nextVersionLabel})
+              </button>
+            )}
           </div>
         )}
       </div>
 
-      {/* Modal de Upload de Nova Revisão */}
+      {/* Modal de Upload de Nova Revisão Oficial (CENÁRIO B — R+1 pós-Cliente) */}
       <RevisionUploadForm
         isOpen={isRevModalOpen}
         onClose={() => setIsRevModalOpen(false)}
         documentId={revision.documentId}
+        codigoDocumento={codigoDocumento}
+        onSuccess={onUploadSuccess}
+      />
+
+      {/* Modal de Correção Interna (CENÁRIO A — mantém a revisão atual) */}
+      <InternalCorrectionForm
+        isOpen={isCorrectionModalOpen}
+        onClose={() => setIsCorrectionModalOpen(false)}
+        documentId={revision.documentId}
+        revisionId={revision.id}
+        versionLabel={revision.versionLabel}
         codigoDocumento={codigoDocumento}
         onSuccess={onUploadSuccess}
       />

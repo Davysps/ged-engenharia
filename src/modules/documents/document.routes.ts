@@ -1,5 +1,11 @@
 import { Router } from 'express';
-import { uploadDocument, uploadRevision, updateMetadataWebhook, getDocumentById } from './document.controller';
+import {
+  uploadDocument,
+  uploadRevision,
+  internalUpdateRevision,
+  updateMetadataWebhook,
+  getDocumentById,
+} from './document.controller';
 import { upload } from '../../middlewares/upload';
 import { verifyToken } from '../../middlewares/auth.middleware';
 
@@ -19,5 +25,14 @@ router.post('/upload', verifyToken, upload.single('file'), uploadDocument);
 // Endpoint para submeter uma nova revisão de um documento existente (R1, R2...)
 // CORREÇÃO ÉPICO 2: Adicionado o verifyToken para proteger a rota!
 router.post('/:id/revisions', verifyToken, upload.single('file'), uploadRevision);
+
+// PATCH 10.3: Retrabalho Interno — substitui o PDF da MESMA revisão (sem criar R+1)
+// e reinicia o ciclo interno de aprovações (novo carimbo VERIFICACAO PENDENTE).
+router.post(
+  '/:id/revisions/:revId/internal-update',
+  verifyToken,
+  upload.single('file'),
+  internalUpdateRevision
+);
 
 export default router;

@@ -124,12 +124,13 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // ── ÉPICO 10 / PATCH 10.2: GATEKEEPER DE NOVA REVISÃO ────────────────
-    // Uma nova revisão (R1, R2...) SÓ é desbloqueada quando:
-    //   (a) o ciclo de "Análise do Cliente" já foi concluído, OU
-    //   (b) o fluxo interno/cliente reprovou e exige uma nova versão oficial, OU
-    //   (c) dados legados sem carimbos (retrocompatibilidade).
-    // Qualquer carimbo ainda PENDENTE bloqueia a subida.
+    // ── PATCH 10.3: GATEKEEPER DE NOVA REVISÃO OFICIAL ───────────────────
+    // PREMISSA MÁXIMA: "Retrabalho Interno" ≠ "Revisão Oficial (Cliente)".
+    // Uma nova revisão (R1, R2...) SÓ nasce quando o ciclo de Análise do
+    // Cliente foi concluído (APROVADO, APROVADO_C/ COMENTARIOS ou REPROVADO),
+    // ou em dados legados sem carimbos (retrocompatibilidade).
+    // Reprovações internas (Verificação/Coordenação) NÃO desbloqueiam R+1:
+    // o retrabalho usa a rota /internal-update mantendo a mesma revisão.
     const lastRevision = document.revisions[0];
 
     if (lastRevision) {
@@ -143,19 +144,17 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
         clientApprovals.length > 0 &&
         clientApprovals.every((a) => a.status !== ApprovalStatus.PENDENTE);
 
-      const needsNewOfficialVersion = lastRevision.status === RevisionStatus.REJEITADO;
       const legacyWithoutApprovals =
         approvals.length === 0 && lastRevision.status === RevisionStatus.APROVADO;
 
-      const canCreateNewRevision =
-        !hasOpenPending && (clientCycleDone || needsNewOfficialVersion || legacyWithoutApprovals);
+      const canCreateNewRevision = !hasOpenPending && (clientCycleDone || legacyWithoutApprovals);
 
       if (!canCreateNewRevision) {
         res.status(403).json({
           error:
-            `GATEKEEPER: A revisão anterior (${lastRevision.versionLabel}) ainda não concluiu o fluxo. ` +
-            'A nova revisão só é desbloqueada após o ciclo de Análise do Cliente ser concluído ' +
-            'ou quando o fluxo reprova e exige uma nova versão oficial.',
+            `GATEKEEPER: A revisão ${lastRevision.versionLabel} não concluiu a Análise do Cliente. ` +
+            'Uma nova revisão oficial (R+1) só pode nascer após a resposta do Cliente. ' +
+            'Se o retorno foi interno (Verificação/Coordenação), use a Correção Interna para manter a revisão atual.',
         });
         return;
       }
@@ -222,6 +221,166 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
   } catch (error) {
     console.error('[GED Engenharia] Erro ao processar a nova revisão:', error);
     res.status(500).json({ error: 'Erro interno ao registrar a revisão técnica.' });
+  }
+};
+
+// ── PATCH 10.3: RETRABALHO INTERNO (Correção sem gerar Revisão Oficial) ─────
+// POST /documents/:id/revisions/:revId/internal-update (multipart/form-data)
+//
+// PREMISSA MÁXIMA: "Retrabalho Interno" ≠ "Revisão Oficial".
+// Quando o Verificador Interno ou a Coordenação devolvem a revisão
+// (REPROVADO / APROVADO_COM_COMENTARIOS), o autor corrige o PDF DENTRO da
+// mesma revisão (R0 permanece R0): o filePath/fileHash são substituídos e um
+// NOVO carimbo ApprovalWorkflow (stage VERIFICACAO, status PENDENTE) reinicia
+// o ciclo interno. Nenhuma nova revisão é criada no banco.
+export const internalUpdateRevision = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId;
+    const documentId = Number(req.params.id);
+    const revisionId = Number(req.params.revId);
+    const file = req.file;
+
+    if (!userId) {
+      res.status(401).json({ error: 'Usuário não autenticado.' });
+      return;
+    }
+
+    if (isNaN(documentId) || isNaN(revisionId)) {
+      res.status(400).json({ error: 'ID do documento ou da revisão inválido.' });
+      return;
+    }
+
+    if (!file) {
+      res.status(400).json({ error: 'Nenhum arquivo corrigido foi submetido.' });
+      return;
+    }
+
+    const revision = await prisma.revision.findUnique({
+      where: { id: revisionId },
+      include: {
+        document: { select: { id: true, contractId: true } },
+        approvalWorkflows: { orderBy: { requestedAt: 'asc' } },
+      },
+    });
+
+    if (!revision || revision.documentId !== documentId) {
+      res.status(404).json({ error: 'Revisão não encontrada para este documento.' });
+      return;
+    }
+
+    // ── RBAC multi-tenant: apenas o Time interno (GESTOR/ENGENHEIRO) do
+    // contrato corrige; usuários Cliente (isClient) jamais reenviam internamente.
+    const actor = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { isClient: true },
+    });
+
+    const membership = await prisma.contractMembership.findUnique({
+      where: { userId_contractId: { userId, contractId: revision.document.contractId } },
+    });
+
+    if (
+      actor?.isClient ||
+      !membership ||
+      !['GESTOR', 'ENGENHEIRO'].includes(membership.role)
+    ) {
+      res.status(403).json({
+        error: 'Acesso negado: apenas o Time interno (Engenharia/Coordenação) pode enviar correções internas.',
+      });
+      return;
+    }
+
+    // ── GATEKEEPER DE RETRABALHO INTERNO (PATCH 10.3) ────────────────────
+    // A correção interna só é válida quando o último carimbo é um retorno do
+    // fluxo interno (Verificação ou Coordenação com REPROVADO/COM COMENTÁRIOS).
+    // Isso impede burlar a Análise do Cliente via esta rota.
+    const approvals = revision.approvalWorkflows ?? [];
+
+    const hasOpenPending = approvals.some(
+      (approval) => approval.status === ApprovalStatus.PENDENTE
+    );
+    if (hasOpenPending) {
+      res.status(409).json({
+        error:
+          'Existe uma análise pendente para esta revisão. Aguarde a conclusão do carimbo antes de enviar nova correção.',
+      });
+      return;
+    }
+
+    const latestStamp =
+      approvals.length > 0 ? approvals[approvals.length - 1] : undefined;
+
+    const isInternalRework =
+      !!latestStamp &&
+      (latestStamp.stage === ApprovalStage.VERIFICACAO ||
+        latestStamp.stage === ApprovalStage.APROVACAO) &&
+      (latestStamp.status === ApprovalStatus.REPROVADO ||
+        latestStamp.status === ApprovalStatus.APROVADO_COM_COMENTARIOS);
+
+    if (!isInternalRework) {
+      res.status(403).json({
+        error:
+          'GATEKEEPER: A Correção Interna só é permitida quando o fluxo interno (Verificação/Coordenação) ' +
+          'devolveu a revisão. Retornos da Análise do Cliente exigem uma Nova Revisão Oficial.',
+      });
+      return;
+    }
+
+    // Substitui o físico da MESMA revisão (sem criar R+1)
+    const { filePath, fileHash } = await uploadFileToS3(
+      file.buffer,
+      file.originalname,
+      file.mimetype
+    );
+
+    const updatedRevision = await prisma.$transaction(async (tx) => {
+      // 1. Atualiza o arquivo e devolve a revisão ao ciclo (EM_REVISAO)
+      const updated = await tx.revision.update({
+        where: { id: revisionId },
+        data: {
+          filePath,
+          fileHash,
+          status: RevisionStatus.EM_REVISAO,
+        },
+        include: {
+          approvalWorkflows: { orderBy: { requestedAt: 'asc' } },
+        },
+      });
+
+      // 2. NOVO carimbo — reinicia o ciclo interno na mesma revisão.
+      //    O histórico anterior é preservado (nunca sobrescrito).
+      await tx.approvalWorkflow.create({
+        data: {
+          revisionId,
+          requesterId: userId,
+          stage: ApprovalStage.VERIFICACAO,
+          status: ApprovalStatus.PENDENTE,
+        },
+      });
+
+      // 3. Novo físico → OCR precisa reprocessar esta revisão
+      await tx.document.update({
+        where: { id: documentId },
+        data: { ocrStatus: DocumentOcrStatus.PENDING },
+      });
+
+      return updated;
+    });
+
+    // INJEÇÃO ÉPICO 5: Disparo assíncrono SQS para OCR do arquivo corrigido
+    try {
+      await sendToOcrQueue(documentId, revisionId, filePath);
+    } catch (sqsError) {
+      console.error('[GED-OCR] Erro ao enviar correção interna para a fila SQS:', sqsError);
+    }
+
+    res.status(200).json({
+      message: `Correção interna registrada em ${updatedRevision.versionLabel}. O ciclo de Verificação foi reiniciado.`,
+      revision: updatedRevision,
+    });
+  } catch (error) {
+    console.error('[GED Engenharia] Erro ao processar a correção interna:', error);
+    res.status(500).json({ error: 'Erro interno ao registrar a correção interna.' });
   }
 };
 

@@ -51,4 +51,29 @@ export const documentService = {
     });
     return response.data;
   },
+
+  /**
+   * PATCH 10.3 — Retrabalho Interno (Correção sem gerar Revisão Oficial).
+   * Substitui o PDF da MESMA revisão (R0 permanece R0) e reinicia o ciclo
+   * interno de aprovações no backend (novo carimbo VERIFICACAO PENDENTE).
+   *
+   * @param documentId - ID do documento pai
+   * @param revisionId - ID da revisão que será corrigida internamente
+   * @param file       - Novo arquivo técnico corrigido (PDF/DWG)
+   */
+  async submitInternalCorrection(
+    documentId: number,
+    revisionId: number,
+    file: File | Blob
+  ): Promise<{ message: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await api.post<{ message: string }>(
+      `/documents/${documentId}/revisions/${revisionId}/internal-update`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+    return response.data;
+  },
 };
