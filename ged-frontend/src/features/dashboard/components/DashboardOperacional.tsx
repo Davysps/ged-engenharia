@@ -14,9 +14,13 @@ import {
   BarChart3,
   Users,
   Hash,
+  Inbox,
 } from 'lucide-react';
 import { dashboardService } from '../services/dashboard.service';
 import type { DashboardData, DocumentByDiscipline, PendingApproval, RecentTransmittal } from '../types/dashboard.types';
+import { useAuth } from '../../../contexts/AuthContext';
+import { api } from '../../../lib/axios';
+import { transmittalService } from '../../transmittals/services/transmittal.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mapeamentos de exibição (labels e cores)
@@ -322,10 +326,165 @@ function RecentTransmittalsTable({ transmittals }: RecentTransmittalsTableProps)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Main Component: DashboardOperacional
+// PATCH 10.4: ClientDashboard — Portal do Cliente isolado
+// PREMISSA MÁXIMA: o Cliente é "cego" para os processos internos. Nada de
+// gráficos por disciplina, status de revisões ou fila de retrabalho interno.
+// Apenas: pendências da análise DELE e as GRDs recebidas (Caixa de Entrada).
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function DashboardOperacional() {
+interface ClientPendingAnalysis {
+  id: number;
+  stage: string;
+}
+
+interface ClientDashboardProps {
+  contractId: number;
+}
+
+function ClientDashboard({ contractId }: ClientDashboardProps) {
+  const [pendingMyAnalysis, setPendingMyAnalysis] = useState(0);
+  const [receivedDocuments, setReceivedDocuments] = useState(0);
+  const [recentGrds, setRecentGrds] = useState<RecentTransmittal[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchClientData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const [pendingsResponse, grdList] = await Promise.all([
+        api.get<ClientPendingAnalysis[]>('/approvals', { params: { contractId } }),
+        transmittalService.list(contractId),
+      ]);
+
+      // Defesa em profundidade: mesmo que a fila venha misturada, o portal do
+      // Cliente só considera carimbos do estágio CLIENTE (Minha Análise).
+      const clientPendings = Array.isArray(pendingsResponse.data)
+        ? pendingsResponse.data.filter((p) => p.stage === 'CLIENTE')
+        : [];
+
+      setPendingMyAnalysis(clientPendings.length);
+      setReceivedDocuments(grdList.reduce((sum, grd) => sum + (grd._count?.items ?? 0), 0));
+      setRecentGrds(
+        grdList.map((grd) => ({
+          id: grd.id,
+          codigo: grd.codigo,
+          assunto: grd.assunto,
+          status: grd.status,
+          createdAt: grd.createdAt,
+          createdByNome: grd.createdBy.nome,
+          itemCount: grd._count?.items ?? 0,
+        }))
+      );
+    } catch (err: unknown) {
+      const errorMessage =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { error?: string } } }).response?.data?.error
+          : 'Erro ao carregar o Portal do Cliente.';
+      setError(errorMessage || 'Erro ao carregar o Portal do Cliente.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchClientData();
+  }, [contractId]);
+
+  if (isLoading) {
+    return (
+      <div className="p-8 max-w-7xl mx-auto">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-gray-200 rounded w-1/3"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="h-24 bg-gray-200 rounded-xl"></div>
+            <div className="h-24 bg-gray-200 rounded-xl"></div>
+          </div>
+          <div className="h-80 bg-gray-200 rounded-xl"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8 max-w-7xl mx-auto">
+        <div className="bg-white rounded-xl shadow-sm border border-red-100 p-8 text-center">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Erro ao Carregar o Portal</h2>
+          <p className="text-gray-500 mb-4">{error}</p>
+          <button
+            onClick={fetchClientData}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors mx-auto"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Tentar Novamente
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8 max-w-7xl mx-auto space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-sky-100 rounded-lg">
+            <Inbox className="w-6 h-6 text-sky-600" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">Portal do Cliente</h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Acompanhe os documentos recebidos e as análises pendentes da sua empresa.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={fetchClientData}
+          className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
+          title="Atualizar"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Atualizar
+        </button>
+      </div>
+
+      {/* Cards do Cliente */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex items-center gap-4">
+          <div className="p-3 bg-amber-100 rounded-lg">
+            <Clock className="w-6 h-6 text-amber-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{pendingMyAnalysis}</p>
+            <p className="text-sm text-gray-500">Documentos Pendentes da Minha Análise</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex items-center gap-4">
+          <div className="p-3 bg-blue-100 rounded-lg">
+            <FileText className="w-6 h-6 text-blue-600" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-900">{receivedDocuments}</p>
+            <p className="text-sm text-gray-500">Total de Documentos Recebidos</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Caixa de Entrada — últimas GRDs recebidas */}
+      <RecentTransmittalsTable transmittals={recentGrds} />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main Component (interno): Dashboard Operacional do Time Interno
+// ─────────────────────────────────────────────────────────────────────────────
+
+function OperationalDashboard() {
   const { contractId } = useParams<{ contractId: string }>();
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -460,4 +619,34 @@ export function DashboardOperacional() {
       </div>
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main Component (exportado): DashboardOperacional
+// PATCH 10.4: Roteamento por papel — Cliente (isClient) recebe o painel limpo
+// do Portal do Cliente; o Time Interno mantém o dashboard operacional completo.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function DashboardOperacional() {
+  const { user } = useAuth();
+  const isClient = user?.isClient === true;
+  const { contractId } = useParams<{ contractId: string }>();
+  const numericContractId = Number(contractId);
+
+  if (isClient) {
+    if (!contractId || isNaN(numericContractId)) {
+      return (
+        <div className="p-8 max-w-7xl mx-auto">
+          <div className="bg-white rounded-xl shadow-sm border border-red-100 p-8 text-center">
+            <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-gray-800 mb-2">Contrato Inválido</h2>
+            <p className="text-gray-500">Não foi possível identificar o contrato solicitado.</p>
+          </div>
+        </div>
+      );
+    }
+    return <ClientDashboard contractId={numericContractId} />;
+  }
+
+  return <OperationalDashboard />;
 }

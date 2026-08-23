@@ -1,6 +1,7 @@
 import React from 'react';
 import { useParams, Outlet, Link, useLocation } from 'react-router-dom';
 import { ContractProvider, useContract } from '../../../contexts/ContractContext';
+import { useAuth } from '../../../contexts/AuthContext';
 import {
   LayoutDashboard,
   FolderOpen,
@@ -16,6 +17,10 @@ import {
 // 1. Componente interno que consome o contexto e constrói a UI (Top Navigation Bar)
 const ContractLayoutInner: React.FC = () => {
   const { contract, role, isLoading, error } = useContract();
+  // PATCH 10.4: Isolamento do Portal do Cliente — o ator externo (isClient)
+  // não pode ver abas de processos internos (Planejamento/Gestão/Aprovações).
+  const { user } = useAuth();
+  const isClient = user?.isClient === true;
   const location = useLocation();
 
   if (isLoading) {
@@ -59,14 +64,16 @@ const ContractLayoutInner: React.FC = () => {
     },
     {
       to: `${basePath}/approvals`,
-      label: 'Aprovações',
+      label: 'Aprovações Internas',
       icon: ClipboardCheck,
       active: location.pathname.includes('/approvals'),
-      visible: ['GESTOR', 'APROVADOR'].includes(role || ''),
+      // PATCH 10.4: Cliente é "cego" para o fluxo interno de aprovação
+      visible: !isClient && ['GESTOR', 'APROVADOR'].includes(role || ''),
     },
     {
       to: `${basePath}/transmittals`,
-      label: 'Transmittals',
+      // PATCH 10.4: para o Cliente, a GRD é a Caixa de Entrada dele
+      label: isClient ? 'Caixa de Entrada (GRDs)' : 'Transmittals',
       icon: Send,
       active: location.pathname.includes('/transmittals'),
     },
@@ -75,13 +82,16 @@ const ContractLayoutInner: React.FC = () => {
       label: 'Planejamento',
       icon: CalendarRange,
       active: location.pathname.includes('/planning'),
+      // PATCH 10.4: Planejamento é processo interno — oculto do Cliente
+      visible: !isClient,
     },
     {
       to: `${basePath}/management`,
       label: 'Gestão',
       icon: Settings2,
       active: location.pathname.includes('/management'),
-      visible: role === 'GESTOR',
+      // PATCH 10.4: Gestão é processo interno — oculto do Cliente
+      visible: !isClient && role === 'GESTOR',
     },
   ];
 

@@ -414,6 +414,18 @@ export const updateMetadataWebhook = async (req: Request, res: Response): Promis
   }
 };
 
+// ── PATCH 10.4: ISOLAMENTO DO PORTAL DO CLIENTE ─────────────────────────
+// Helper central: identifica se o requisitante é um ator externo (Cliente).
+// O JWT carrega apenas o userId; o flag isClient é lido da fonte de verdade
+// (tabela User) a cada requisição para evitar privilégios em tokens antigos.
+const getActorIsClient = async (userId: number): Promise<boolean> => {
+  const actor = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isClient: true },
+  });
+  return actor?.isClient ?? false;
+};
+
 // ÉPICO 8: Listagem de documentos do contrato com Busca Avançada (filtros combináveis)
 export const listDocuments = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -433,8 +445,11 @@ export const listDocuments = async (req: AuthRequest, res: Response): Promise<vo
     // Validação Zod dos query params de busca avançada (busca, disciplinaId, pacoteId)
     const filters = documentListQuerySchema.parse(req.query);
 
+    // PATCH 10.4: Cliente só lista documentos que chegaram ao estágio CLIENTE.
+    const isClient = await getActorIsClient(userId);
+
     // Delega a query + verificação de RBAC (multi-tenant) para o service
-    const documents = await DocumentService.listDocuments(contractId, userId, filters);
+    const documents = await DocumentService.listDocuments(contractId, userId, filters, { isClient });
 
     res.status(200).json(documents);
   } catch (error: any) {
@@ -467,11 +482,17 @@ export const getDocumentById = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
+    // PATCH 10.4: Cliente não acessa documentos que não chegaram ao estágio
+    // CLIENTE (o service devolve null → 403 abaixo, sem vazamento de existência)
+    // e recebe apenas os carimbos visíveis (estágio CLIENTE, sem "roupa suja").
+    const isClient = await getActorIsClient(userId);
+
     // Delega a query complexa + verificação de RBAC (multi-tenant) para o service
-    const document = await DocumentService.findDocumentById(documentId, userId);
+    const document = await DocumentService.findDocumentById(documentId, userId, { isClient });
 
     if (!document) {
       // Retorna 403 para não vazar a existência do documento a usuários não autorizados
+      // (inclui o caso PATCH 10.4: documento ainda preso no ciclo interno)
       res.status(403).json({ error: 'Acesso negado ou documento não encontrado.' });
       return;
     }

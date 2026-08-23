@@ -32,9 +32,21 @@ export const getPendingApprovals = async (req: AuthRequest, res: Response): Prom
       return;
     }
 
+    // ── PATCH 10.4: ISOLAMENTO DO PORTAL DO CLIENTE ─────────────────────
+    // PREMISSA MÁXIMA: o Cliente é "cego" para os processos internos.
+    // Se o requisitante for isClient, a fila exposta contém APENAS carimbos
+    // do estágio CLIENTE (a "Minha Análise"). A fila interna de Verificação/
+    // Coordenação (retrabalho do time) nunca é exposta ao ator externo.
+    const actor = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { isClient: true }
+    });
+    const isClient = actor?.isClient ?? false;
+
     const pending = await prisma.approvalWorkflow.findMany({
       where: {
         status: ApprovalStatus.PENDENTE,
+        ...(isClient ? { stage: ApprovalStage.CLIENTE } : {}),
         revision: {
           document: {
             contractId: contractId

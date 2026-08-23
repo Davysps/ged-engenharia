@@ -2,16 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import { transmittalService, type Transmittal, type RealApprovedRevision } from '../services/transmittal.service';
+import { useAuth } from '../../../contexts/AuthContext';
 
 export const TransmittalDashboard: React.FC = () => {
   const { contractId } = useParams<{ contractId: string }>();
-  
-  const [activeTab, setActiveTab] = useState<'NOVA_GUIA' | 'HISTORICO'>('NOVA_GUIA');
+  // PATCH 10.4: Isolamento do Portal do Cliente — a tela vira "Caixa de Entrada":
+  // sem emissão de GRD, apenas leitura das guias recebidas e seus documentos.
+  const { user } = useAuth();
+  const isClient = user?.isClient === true;
+
+  const [activeTab, setActiveTab] = useState<'NOVA_GUIA' | 'HISTORICO'>(isClient ? 'HISTORICO' : 'NOVA_GUIA');
   const [transmittals, setTransmittals] = useState<Transmittal[]>([]);
-  
+
   const [approvedRevisions, setApprovedRevisions] = useState<RealApprovedRevision[]>([]);
   const [selectedRevisionIds, setSelectedRevisionIds] = useState<number[]>([]);
-  
+
   const [assunto, setAssunto] = useState('');
   const [mensagem, setMensagem] = useState('');
   const [destinatario, setDestinatario] = useState('');
@@ -19,12 +24,13 @@ export const TransmittalDashboard: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (activeTab === 'HISTORICO') {
+    // PATCH 10.4: o Cliente nunca carrega o acervo interno de emissão
+    if (isClient || activeTab === 'HISTORICO') {
       fetchTransmittals();
     } else {
       fetchRealApprovedRevisions();
     }
-  }, [activeTab, contractId]);
+  }, [activeTab, contractId, isClient]);
 
   const fetchTransmittals = async () => {
     try {
@@ -102,18 +108,22 @@ export const TransmittalDashboard: React.FC = () => {
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex justify-between items-center border-b border-gray-200 pb-4">
-        <h1 className="text-2xl font-bold text-gray-800">Guias de Remessa de Documentos (GRD)</h1>
-        <div className="space-x-2">
-          <button onClick={() => setActiveTab('NOVA_GUIA')} className={`px-4 py-2 rounded-md font-medium transition-colors ${activeTab === 'NOVA_GUIA' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}`}>
-            Emitir Nova GRD
-          </button>
-          <button onClick={() => setActiveTab('HISTORICO')} className={`px-4 py-2 rounded-md font-medium transition-colors ${activeTab === 'HISTORICO' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}`}>
-            Histórico Oficial
-          </button>
-        </div>
+        <h1 className="text-2xl font-bold text-gray-800">
+          {isClient ? 'Caixa de Entrada (GRDs)' : 'Guias de Remessa de Documentos (GRD)'}
+        </h1>
+        {!isClient && (
+          <div className="space-x-2">
+            <button onClick={() => setActiveTab('NOVA_GUIA')} className={`px-4 py-2 rounded-md font-medium transition-colors ${activeTab === 'NOVA_GUIA' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}`}>
+              Emitir Nova GRD
+            </button>
+            <button onClick={() => setActiveTab('HISTORICO')} className={`px-4 py-2 rounded-md font-medium transition-colors ${activeTab === 'HISTORICO' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'}`}>
+              Histórico Oficial
+            </button>
+          </div>
+        )}
       </div>
 
-      {activeTab === 'NOVA_GUIA' && (
+      {activeTab === 'NOVA_GUIA' && !isClient && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-white rounded-lg shadow border border-gray-200 overflow-hidden h-fit">
             <div className="p-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
@@ -202,6 +212,7 @@ export const TransmittalDashboard: React.FC = () => {
                   <td className="px-6 py-4 text-center space-x-2">
                     {t.status === 'CONCLUIDO' ? (
                       <>
+                        {/* PATCH 10.4: é por aqui que o Cliente acessa os documentos do lote */}
                         <a href={t.pdfCapaUrl!} target="_blank" rel="noreferrer" className="inline-block px-3 py-1 bg-gray-800 hover:bg-gray-700 text-white text-xs font-medium rounded transition-colors shadow-sm">Capa PDF</a>
                         <a href={t.zipUrl!} target="_blank" rel="noreferrer" className="inline-block px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded transition-colors shadow-sm">Pacote ZIP</a>
                       </>
@@ -209,6 +220,15 @@ export const TransmittalDashboard: React.FC = () => {
                   </td>
                 </tr>
               ))}
+              {transmittals.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-500">
+                    {isClient
+                      ? 'Nenhuma GRD recebida até o momento. Os documentos enviados pela equipe aparecerão aqui.'
+                      : 'Nenhuma Guia de Remessa foi emitida para este contrato.'}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
