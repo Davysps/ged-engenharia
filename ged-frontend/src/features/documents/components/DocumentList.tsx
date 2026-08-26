@@ -4,11 +4,12 @@ import { api } from '../../../lib/axios';
 import { useContract } from '../../../contexts/ContractContext';
 import { usePlanning } from '../../planning/hooks/usePlanning';
 import { useDisciplines } from '../../management/hooks/useDisciplines';
-import { FileText, UploadCloud, Eye, History, Clock, CheckCircle, AlertCircle, Search, FilterX, Package } from 'lucide-react';
+import { FileText, UploadCloud, Eye, History, Clock, CheckCircle, AlertCircle, Search, FilterX, Package, Download } from 'lucide-react';
 import { UploadForm } from './UploadForm';
 import { DocumentViewer } from './DocumentViewer';
 import { RevisionUploadForm } from './RevisionUploadForm';
 import { RevisionHistoryModal } from './RevisionHistoryModal';
+import { documentService } from '../services/document.service';
 
 interface Revision {
   id: number;
@@ -60,6 +61,9 @@ export function DocumentList() {
   // ÉPICO 8: Acesso Rápido ao Histórico (Modal/Popover de Versões)
   const [historyDoc, setHistoryDoc] = useState<Document | null>(null);
 
+  // ÉPICO 11: Exportação de MDR
+  const [isExporting, setIsExporting] = useState(false);
+
   const navigate = useNavigate();
   const canUpload = role === 'GESTOR' || role === 'ENGENHEIRO';
 
@@ -104,6 +108,29 @@ export function DocumentList() {
   };
 
   const hasActiveFilters = busca.trim() !== '' || disciplinaId !== '' || pacoteId !== '';
+
+  // ÉPICO 11: Exportação de MDR
+  const handleExportMDR = async () => {
+    if (!contractId) return;
+    try {
+      setIsExporting(true);
+      const blob = await documentService.exportMDR(contractId);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const dateStr = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `MDR_Contrato_${dateStr}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erro ao exportar MDR:', error);
+      alert('Erro ao exportar o MDR. Tente novamente.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const handleViewDocument = (doc: Document, url: string, nome: string) => {
     setSelectedDocument(doc);
@@ -218,6 +245,16 @@ export function DocumentList() {
                 Limpar
               </button>
             )}
+
+            {/* ÉPICO 11: Botão Exportar MDR */}
+            <button
+              onClick={handleExportMDR}
+              disabled={isExporting}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-emerald-700 border border-emerald-300 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download className="w-4 h-4" />
+              {isExporting ? 'Exportando...' : 'Exportar MDR'}
+            </button>
           </div>
         </div>
 

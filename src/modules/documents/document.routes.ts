@@ -5,6 +5,7 @@ import {
   internalUpdateRevision,
   updateMetadataWebhook,
   getDocumentById,
+  exportMDR,
 } from './document.controller';
 import { upload } from '../../middlewares/upload';
 import { verifyToken } from '../../middlewares/auth.middleware';
@@ -14,6 +15,10 @@ const router = Router();
 // ÉPICO 5: Webhook Recebedor Interno
 // DEVE vir antes das rotas JWT para manter o isolamento de rede Microserviço-Microserviço
 router.patch('/:id/metadata', updateMetadataWebhook);
+
+// ÉPICO 11: Exportação de MDR (Master Document Register)
+// DEVE vir ANTES de /:id para não conflitar com o parâmetro de rota
+router.get('/export/mdr', verifyToken, exportMDR);
 
 // ÉPICO 8: Detalhamento de Documento (Single Source of Truth)
 // Retorna metadados, histórico de revisões, status OCR e relação de Transmittals

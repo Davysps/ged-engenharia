@@ -76,4 +76,20 @@ export const documentService = {
     );
     return response.data;
   },
+
+  /**
+   * ÉPICO 11 — Exportação de MDR (Master Document Register).
+   * Faz o download de uma planilha .xlsx com todos os metadados consolidados
+   * do contrato (Código, Título, Disciplina, Pacote, Revisão, Status, Data).
+   *
+   * @param contractId - ID do contrato ativo
+   * @returns Blob do arquivo .xlsx
+   */
+  async exportMDR(contractId: number): Promise<Blob> {
+    const response = await api.get('/documents/export/mdr', {
+      params: { contractId },
+      responseType: 'blob',
+    });
+    return response.data;
+  },
 };

@@ -466,6 +466,47 @@ export const listDocuments = async (req: AuthRequest, res: Response): Promise<vo
   }
 };
 
+// ── ÉPICO 11: EXPORTAÇÃO DE MDR (Master Document Register) ─────────────
+// GET /documents/export/mdr?contractId=X
+// Retorna um arquivo .xlsx com todos os metadados consolidados do contrato.
+export const exportMDR = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId;
+    const contractId = Number(req.query.contractId);
+
+    if (!userId) {
+      res.status(401).json({ error: 'Usuário não autenticado.' });
+      return;
+    }
+
+    if (isNaN(contractId)) {
+      res.status(400).json({ error: 'O parâmetro contractId é obrigatório e deve ser um número válido.' });
+      return;
+    }
+
+    const buffer = await DocumentService.exportMDR(contractId, userId);
+
+    const contract = await prisma.contract.findUnique({
+      where: { id: contractId },
+      select: { codigo: true },
+    });
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `MDR_${contract?.codigo ?? contractId}_${dateStr}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.status(200).send(buffer);
+  } catch (error: any) {
+    if (error?.code === 'ACCESS_DENIED') {
+      res.status(403).json({ error: 'Acesso negado a este contrato.' });
+      return;
+    }
+    console.error('[GED Engenharia] Erro ao exportar MDR:', error);
+    res.status(500).json({ error: 'Erro interno ao gerar a exportação do MDR.' });
+  }
+};
+
 // ÉPICO 8: Detalhamento de Documento (Single Source of Truth)
 export const getDocumentById = async (req: AuthRequest, res: Response): Promise<void> => {
   try {

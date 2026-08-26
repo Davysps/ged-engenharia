@@ -1,5 +1,6 @@
 import { Prisma, ApprovalStage } from '@prisma/client';
 import { prisma } from '../../prisma';
+import * as XLSX from 'xlsx';
 import type { ContractRole } from '@prisma/client';
 import type { DocumentListQueryInput } from './document.schemas';
 
@@ -216,5 +217,105 @@ export class DocumentService {
       ...document,
       userRole: (membership?.role ?? null) as ContractRole | null,
     };
+  }
+
+  /**
+   * ÉPICO 11: Exportação de MDR (Master Document Register).
+   * Gera uma planilha Excel (.xlsx) com todos os documentos do contrato,
+   * incluindo disciplina, pacote, revisão atual, status do workflow e data
+   * da última revisão.
+   *
+   * @param contractId - ID do contrato (tenant)
+   * @param userId     - ID do usuário autenticado (extraído do JWT)
+   * @returns Buffer do arquivo .xlsx pronto para download
+   * @throws Error com código 'ACCESS_DENIED' se o usuário não for membro do contrato
+   */
+  static async exportMDR(contractId: number, userId: number): Promise<Buffer> {
+    // ── 1. VERIFICAÇÃO DE RBAC / ISOLAMENTO MULTI-TENANT ──────────────
+    const membership = await prisma.contractMembership.findUnique({
+      where: {
+        userId_contractId: { userId, contractId },
+      },
+      select: { role: true },
+    });
+
+    if (!membership) {
+      const error = new Error('Acesso negado: usuário não é membro deste contrato.');
+      (error as any).code = 'ACCESS_DENIED';
+      throw error;
+    }
+
+    // ── 2. BUSCA TODOS OS DOCUMENTOS DO CONTRATO COM RELACIONAMENTOS ─
+    const documents = await prisma.document.findMany({
+      where: { contractId },
+      orderBy: { codigoDocumento: 'asc' },
+      include: {
+        contractDiscipline: true,
+        workPackage: true,
+        revisions: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            approvalWorkflows: {
+              orderBy: { requestedAt: 'asc' },
+            },
+          },
+        },
+      },
+    });
+
+    // ── 3. MONTA AS LINHAS DA PLANILHA ────────────────────────────────
+    const rows = documents.map((doc) => {
+      const revisions = doc.revisions ?? [];
+      const currentRevision = revisions.length > 0 ? revisions[revisions.length - 1] : null;
+
+      // Determina o status do workflow a partir do último carimbo
+      let workflowStatus = 'SEM FLUXO';
+      if (currentRevision) {
+        const approvals = currentRevision.approvalWorkflows ?? [];
+        if (approvals.length > 0) {
+          const lastApproval = approvals[approvals.length - 1];
+          workflowStatus = lastApproval?.status ?? 'SEM FLUXO';
+        } else {
+          workflowStatus = currentRevision.status;
+        }
+      }
+
+      // Data da última revisão
+      const lastRevisionDate = currentRevision
+        ? currentRevision.createdAt
+        : null;
+
+      return {
+        'Código do Documento': doc.codigoDocumento,
+        'Título': doc.titulo,
+        'Disciplina': doc.contractDiscipline?.nome ?? '—',
+        'Pacote': doc.workPackage?.nome ?? '—',
+        'Revisão Atual': currentRevision?.versionLabel ?? '—',
+        'Status do Workflow': workflowStatus,
+        'Data da Última Revisão': lastRevisionDate
+          ? new Date(lastRevisionDate).toLocaleDateString('pt-BR')
+          : '—',
+      };
+    });
+
+    // ── 4. GERA O ARQUIVO XLSX ────────────────────────────────────────
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+
+    // Largura das colunas para melhor leitura
+    worksheet['!cols'] = [
+      { wch: 25 }, // Código do Documento
+      { wch: 50 }, // Título
+      { wch: 20 }, // Disciplina
+      { wch: 20 }, // Pacote
+      { wch: 14 }, // Revisão Atual
+      { wch: 22 }, // Status do Workflow
+      { wch: 22 }, // Data da Última Revisão
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'MDR');
+
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    return buffer as Buffer;
   }
 }
