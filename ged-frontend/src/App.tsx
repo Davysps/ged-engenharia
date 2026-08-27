@@ -9,7 +9,7 @@ import { DocumentDetail } from './features/documents/components/DocumentDetail';
 import { ApprovalDashboard } from './features/documents/components/ApprovalDashboard';
 import { TransmittalDashboard } from './features/transmittals/components/TransmittalDashboard';
 import { DashboardOperacional } from './features/dashboard/components/DashboardOperacional';
-import { ManagementHome } from './features/management/pages/ManagementHome';
+import { ManagementHome } from './features/audit/pages/ManagementHome';
 import { PlanningHome } from './features/planning/pages/PlanningHome';
 
 // 1. Nosso "Guarda de Trânsito": Protege rotas que exigem login

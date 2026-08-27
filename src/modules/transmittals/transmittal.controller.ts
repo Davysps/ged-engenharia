@@ -2,6 +2,7 @@ import { Request, Response, RequestHandler } from 'express';
 import { prisma } from '../../prisma';
 import { ApprovalStatus, ApprovalStage } from '@prisma/client';
 import { createTransmittalSchema } from './transmittal.schemas';
+import { AuditService } from '../audit/audit.service';
 
 export class TransmittalController {
   
@@ -118,6 +119,24 @@ export class TransmittalController {
 
           return transmittal;
         });
+      });
+
+      // ÉPICO 12: Trilha de Auditoria — Emissão de GRD
+      AuditService.log({
+        userId,
+        contractId,
+        action: 'EMIT_GRD',
+        entity: 'Transmittal',
+        entityId: transmittal.id,
+        details: {
+          codigo: transmittal.codigo,
+          assunto,
+          proposito,
+          destinatario: destinatario ?? null,
+          revisionCount: validRevisionIds.length,
+          revisionIds: validRevisionIds,
+        },
+        ipAddress: req.ip ?? null,
       });
 
       res.status(202).json({

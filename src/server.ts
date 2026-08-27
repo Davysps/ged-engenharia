@@ -10,6 +10,7 @@ import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import managementRoutes from './modules/management/management.routes';
 import planningRoutes from './modules/planning/planning.routes';
 import timesheetRoutes from './modules/timesheets/timesheet.routes';
+import auditRoutes from './modules/audit/audit.routes';
 
 dotenv.config();
 
@@ -37,6 +38,9 @@ app.use('/planning', planningRoutes);
 
 // Épico 9: Módulo de Apontamento de Horas (Timesheet)
 app.use('/timesheets', timesheetRoutes);
+
+// Épico 12: Trilha de Auditoria (Data Room & Audit Logs)
+app.use('/audit-logs', auditRoutes);
 
 const PORT = process.env.PORT || 3000;
 

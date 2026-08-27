@@ -4,6 +4,7 @@ import { AuthRequest } from '../../middlewares/auth.middleware';
 import { ApprovalStatus, ApprovalStage, RevisionStatus } from '@prisma/client';
 import { approvalActionSchema } from './approval.schemas';
 import { uploadFileToS3 } from '../../services/s3.service';
+import { AuditService } from '../audit/audit.service';
 
 const STAGE_LABEL: Record<ApprovalStage, string> = {
   VERIFICACAO: 'Verificação (Time Interno)',
@@ -275,6 +276,28 @@ export const handleApprovalAction = async (req: AuthRequest, res: Response): Pro
           }
         });
       }
+    });
+
+    // ÉPICO 12: Trilha de Auditoria — Aprovação/Rejeição de revisão
+    AuditService.log({
+      userId,
+      contractId,
+      action: `APPROVAL_${status}`,
+      entity: 'ApprovalWorkflow',
+      entityId: approvalId,
+      details: {
+        revisionId: workflow.revisionId,
+        documentId: workflow.revision.document.id,
+        codigoDocumento: workflow.revision.document.codigoDocumento,
+        versionLabel: workflow.revision.versionLabel,
+        stage,
+        previousStatus: workflow.status,
+        newRevisionStatus: nextRevisionStatus,
+        hasComments: !!actionComments,
+        hasCommentedFile: !!commentedFileUrl,
+        isClient,
+      },
+      ipAddress: req.ip ?? null,
     });
 
     res.status(200).json({

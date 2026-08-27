@@ -69,6 +69,7 @@ Divisão estrita baseada em Domain-Driven Design (DDD):
 - **[ÉPICO 9] Estruturação Hierárquica e Apontamento de Horas (INICIADO — Fase 1):** Modelos `Project`, `TimeLog` e `DocumentLink` criados no Prisma; `Contract` ganhou `projectId` opcional (retrocompatibilidade). Backend: módulo `timesheets` (CRUD de horas com `userId` do JWT + isolamento multi-tenant por membership do contrato) e `GET /projects` agora devolve a árvore completa `Clientes > Projetos > Contratos`. Frontend: seção "Apontamento de Horas" no detalhamento do documento (`TimesheetForm`, `TimesheetList`, `useTimesheet`) e Dashboard agrupado por Cliente/Projeto.
 - **[ÉPICO 11] Exportação de MDR (INICIADO — Fase 1):** Rota `GET /documents/export/mdr` (backend) gerando Excel com metadados consolidados do contrato (Código, Título, Disciplina, Pacote, Revisão, Status, Data). Botão "Exportar MDR" no frontend (DocumentList) com download via blob.
 - **[ÉPICO 10] Fluxograma Visual e Motor de Aprovação Estrito (INICIADO — Fase 1):** Motor de aprovação estrito com status exatos `APROVADO`, `APROVADO_COM_COMENTARIOS`, `REPROVADO` e `PENDENTE` no `ApprovalWorkflow`; campo `isClient` em `ApprovalWorkflow` e `User` para diferenciar atores internos (Time) de externos (Cliente). GATEKEEPER no upload de novas revisões: a revisão anterior precisa estar finalizada e sem pendências em aberto (senão `403`). Frontend: dropdown com as ações exatas "Aprovar sem comentários", "Aprovar com comentários" e "Reprovar"; timeline diferencia visualmente comentários do Time (azul) e do Cliente (laranja); botão "Visualizar Fluxo" com modal de Fluxograma horizontal (Elaboração ➔ Verificação ➔ Revisão Verificação ➔ Aprovação ➔ Revisão Aprovação) destacando a etapa atual.
+- **[ÉPICO 12] Trilha de Auditoria / Data Room (INICIADO — Fase 1):** Model `AuditLog` com `action`, `entity`, `entityId`, `details` (JSON), `ipAddress`, `createdAt`. Relação multi-tenant com `User` e `Contract`. Backend: `AuditService.log()` + `GET /audit-logs` (protegido por GESTOR). Intercepção em controllers de Documento (upload, nova revisão), Aprovações (aprovação/rejeição) e Transmittals (emissão de GRD). Frontend: aba "Trilha de Auditoria" no módulo de Gestão com tabela visual de sistema de segurança.
 - **[DASHBOARD]** KPI consolidados (documentos por disciplina, status, pendências, últimas GRDs).
 
 ---
@@ -95,23 +96,28 @@ Divisão estrita baseada em Domain-Driven Design (DDD):
 - **Controle Estrito de Caixa de Comentários:** Na aba do documento, substituir aprovações genéricas por opções exatas: **"Aprovado sem comentários"**, **"Aprovado com comentários"**, e **"Reprovado"**.
 - **Identificação de Atores:** O sistema deve sinalizar visualmente na timeline se o comentário/reprovação foi feito pela equipe interna (Verificador do time) ou pelo Cliente.
 
+**ÉPICO 12: Trilha de Auditoria (Data Room & Audit Logs)** _(🟡 INICIADO — Fase 1)_
+- **Model `AuditLog`:** Registro imutável de ações críticas com `userId`, `contractId`, `action`, `entity`, `entityId`, `details` (JSON), `ipAddress` e `createdAt`.
+- **Serviço de Auditoria:** Helper síncrono `AuditService.log()` invocado em controllers de Documentos, Aprovações e Transmittals.
+- **Rota `GET /audit-logs`:** Protegida por RBAC (apenas GESTOR), retorna logs do contrato ordenados por data DESC.
+- **Frontend (Data Room):** Aba "Trilha de Auditoria" no módulo de Gestão com tabela visual de segurança (monoespaçada).
+
 **🔒 PENDENTES PARA FECHAR A FASE 1:**
-- **Auditoria (Data Room):** Logs de eventos com `userId`, timestamp e IP.
 - **Busca Avançada:** Finalizar filtros por `busca`, `disciplinaId`, e `pacoteId`.
 
 ### FASE 2: Inovações para TOP 1 de Mercado (Diferenciais)
 
-**ÉPICO 11: Exportação de MDR (Master Document Register)** _(🟡 INICIADO — Fase 1)_
+**ÉPICO 13: Exportação de MDR (Master Document Register)** _(🟡 INICIADO — Fase 1)_
 - Rota backend `GET /documents/export/mdr` gerando planilha Excel (.xlsx) com colunas: Código, Título, Disciplina, Pacote, Revisão Atual, Status do Workflow e Data da Última Revisão.
 - Frontend: botão "Exportar MDR" na toolbar de filtros do DocumentList, download via blob com nomenclatura `MDR_Contrato_Data.xlsx`.
 
-**ÉPICO 12: OCR Autônomo e Full-Text Search Nativo**
+**ÉPICO 14: OCR Autônomo e Full-Text Search Nativo**
 - Melhorar o Worker Python para realizar a leitura total do PDF (não apenas do selo) de forma silenciosa e autônoma, permitindo que a barra de busca encontre "palavras que contenham dentro do PDF" e retorne o documento na listagem.
 
-**ÉPICO 12: Visualizadores Avançados, Markup e Redlining**
+**ÉPICO 15: Visualizadores Avançados, Markup e Redlining**
 - **PDF Comentado Gerado por IA:** Fazer com que os comentários do verificador gerem automaticamente um novo arquivo concatenado chamado `XXX-XXX-XXX_RX_Comentado.pdf`.
 - **Visualizador DWG:** Integrar um visualizador nativo de arquivos CAD no navegador para complementar a visualização de PDF. (Será refinado caso exija APIs pagas como Autodesk Forge).
 
-**ÉPICO 13: Notificações, Conformidade (ISO 19650) e PWA**
+**ÉPICO 16: Notificações, Conformidade (ISO 19650) e PWA**
 - Implementação de Máscaras de nomenclatura rígidas para o contrato.
 - Acesso Offline via App Progressivo (PWA) e Alertas de Sino/E-mail para os usuários.

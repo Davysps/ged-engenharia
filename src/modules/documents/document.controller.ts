@@ -6,6 +6,7 @@ import type { AuthRequest } from '../../middlewares/auth.middleware';
 import { sendToOcrQueue } from '../../services/sqs.service';
 import { DocumentService } from './document.service';
 import { uploadDocumentSchema, documentListQuerySchema } from './document.schemas';
+import { AuditService } from '../audit/audit.service';
 
 export const uploadDocument = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -71,6 +72,22 @@ export const uploadDocument = async (req: AuthRequest, res: Response): Promise<v
     } catch (sqsError) {
       console.error('[GED-OCR] Erro ao enviar documento R0 para a fila SQS:', sqsError);
     }
+
+    // ÉPICO 12: Trilha de Auditoria — Upload de novo documento
+    AuditService.log({
+      userId,
+      contractId,
+      action: 'UPLOAD_DOCUMENT',
+      entity: 'Document',
+      entityId: newDocument.id,
+      details: {
+        codigoDocumento,
+        titulo,
+        revisionLabel: 'R0',
+        fileHash: newDocument.revisions[0]?.fileHash,
+      },
+      ipAddress: req.ip ?? null,
+    });
 
     res.status(201).json(newDocument);
   } catch (error: any) {
@@ -216,6 +233,21 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
     } catch (sqsError) {
       console.error('[GED-OCR] Erro ao enviar nova revisão para a fila SQS:', sqsError);
     }
+
+    // ÉPICO 12: Trilha de Auditoria — Nova revisão oficial
+    AuditService.log({
+      userId,
+      contractId: document.contractId,
+      action: 'UPLOAD_REVISION',
+      entity: 'Revision',
+      entityId: newRevision.id,
+      details: {
+        documentId,
+        versionLabel: nextVersionLabel,
+        fileHash: newRevision.fileHash,
+      },
+      ipAddress: req.ip ?? null,
+    });
 
     res.status(201).json(newRevision);
   } catch (error) {
@@ -373,6 +405,21 @@ export const internalUpdateRevision = async (req: AuthRequest, res: Response): P
     } catch (sqsError) {
       console.error('[GED-OCR] Erro ao enviar correção interna para a fila SQS:', sqsError);
     }
+
+    // ÉPICO 12: Trilha de Auditoria — Correção interna de revisão
+    AuditService.log({
+      userId,
+      contractId: revision.document.contractId,
+      action: 'INTERNAL_UPDATE_REVISION',
+      entity: 'Revision',
+      entityId: revisionId,
+      details: {
+        documentId,
+        versionLabel: updatedRevision.versionLabel,
+        fileHash,
+      },
+      ipAddress: req.ip ?? null,
+    });
 
     res.status(200).json({
       message: `Correção interna registrada em ${updatedRevision.versionLabel}. O ciclo de Verificação foi reiniciado.`,
