@@ -66,10 +66,11 @@ Divisão estrita baseada em Domain-Driven Design (DDD):
 - **[ÉPICO 7] Planejamento e Coordenação:** Gestão de `WorkPackage`, integração com Upload (`contractDisciplineId` e `workPackageId`). O campo legado `disciplina` (enum) foi removido com sucesso.
 - **[ÉPICO 8] Detalhamento:** Tela `/documentos/:id` como Single Source of Truth com timeline de revisões e histórico.
 - **[ÉPICO 8] Refinamento Visual e UI/UX (Concluído):** Identidade visual própria na Topbar (marca "GED Engenharia" + ícone de Nuvem), Top Navigation Bar substituindo a Sidebar, nomes/códigos de documentos clicáveis (atalho principal para o detalhamento via `/contracts/:contractId/documents/:documentId`) e Modal de "Histórico de Versões" com acesso rápido ao clicar no ícone de Relógio na listagem.
-- **[ÉPICO 9] Estruturação Hierárquica e Apontamento de Horas (INICIADO — Fase 1):** Modelos `Project`, `TimeLog` e `DocumentLink` criados no Prisma; `Contract` ganhou `projectId` opcional (retrocompatibilidade). Backend: módulo `timesheets` (CRUD de horas com `userId` do JWT + isolamento multi-tenant por membership do contrato) e `GET /projects` agora devolve a árvore completa `Clientes > Projetos > Contratos`. Frontend: seção "Apontamento de Horas" no detalhamento do documento (`TimesheetForm`, `TimesheetList`, `useTimesheet`) e Dashboard agrupado por Cliente/Projeto.
-- **[ÉPICO 11] Exportação de MDR (INICIADO — Fase 1):** Rota `GET /documents/export/mdr` (backend) gerando Excel com metadados consolidados do contrato (Código, Título, Disciplina, Pacote, Revisão, Status, Data). Botão "Exportar MDR" no frontend (DocumentList) com download via blob.
-- **[ÉPICO 10] Fluxograma Visual e Motor de Aprovação Estrito (INICIADO — Fase 1):** Motor de aprovação estrito com status exatos `APROVADO`, `APROVADO_COM_COMENTARIOS`, `REPROVADO` e `PENDENTE` no `ApprovalWorkflow`; campo `isClient` em `ApprovalWorkflow` e `User` para diferenciar atores internos (Time) de externos (Cliente). GATEKEEPER no upload de novas revisões: a revisão anterior precisa estar finalizada e sem pendências em aberto (senão `403`). Frontend: dropdown com as ações exatas "Aprovar sem comentários", "Aprovar com comentários" e "Reprovar"; timeline diferencia visualmente comentários do Time (azul) e do Cliente (laranja); botão "Visualizar Fluxo" com modal de Fluxograma horizontal (Elaboração ➔ Verificação ➔ Revisão Verificação ➔ Aprovação ➔ Revisão Aprovação) destacando a etapa atual.
-- **[ÉPICO 12] Trilha de Auditoria / Data Room (INICIADO — Fase 1):** Model `AuditLog` com `action`, `entity`, `entityId`, `details` (JSON), `ipAddress`, `createdAt`. Relação multi-tenant com `User` e `Contract`. Backend: `AuditService.log()` + `GET /audit-logs` (protegido por GESTOR). Intercepção em controllers de Documento (upload, nova revisão), Aprovações (aprovação/rejeição) e Transmittals (emissão de GRD). Frontend: aba "Trilha de Auditoria" no módulo de Gestão com tabela visual de sistema de segurança.
+- **[ÉPICO 9] Estruturação Hierárquica e Apontamento de Horas (✅ CONCLUÍDO):** Modelos `Project`, `TimeLog` e `DocumentLink` criados no Prisma; `Contract` ganhou `projectId` opcional (retrocompatibilidade). Backend: módulo `timesheets` (CRUD de horas com `userId` do JWT + isolamento multi-tenant por membership do contrato) e `GET /projects` agora devolve a árvore completa `Clientes > Projetos > Contratos`. Frontend: seção "Apontamento de Horas" no detalhamento do documento (`TimesheetForm`, `TimesheetList`, `useTimesheet`) e Dashboard agrupado por Cliente/Projeto.
+- **[ÉPICO 11] Exportação de MDR (✅ CONCLUÍDO):** Rota `GET /documents/export/mdr` (backend) gerando Excel com metadados consolidados do contrato (Código, Título, Disciplina, Pacote, Revisão, Status, Data). Botão "Exportar MDR" no frontend (DocumentList) com download via blob.
+- **[ÉPICO 10] Fluxograma Visual e Motor de Aprovação Estrito (✅ CONCLUÍDO):** Motor de aprovação estrito com status exatos `APROVADO`, `APROVADO_COM_COMENTARIOS`, `REPROVADO` e `PENDENTE` no `ApprovalWorkflow`; campo `isClient` em `ApprovalWorkflow` e `User` para diferenciar atores internos (Time) de externos (Cliente). GATEKEEPER no upload de novas revisões: a revisão anterior precisa estar finalizada e sem pendências em aberto (senão `403`). Frontend: dropdown com as ações exatas "Aprovar sem comentários", "Aprovar com comentários" e "Reprovar"; timeline diferencia visualmente comentários do Time (azul) e do Cliente (laranja); botão "Visualizar Fluxo" com modal de Fluxograma horizontal (Elaboração ➔ Verificação ➔ Revisão Verificação ➔ Aprovação ➔ Revisão Aprovação) destacando a etapa atual.
+- **[ÉPICO 12] Trilha de Auditoria / Data Room (✅ CONCLUÍDO):** Model `AuditLog` com `action`, `entity`, `entityId`, `details` (JSON), `ipAddress`, `createdAt`. Relação multi-tenant com `User` e `Contract`. Backend: `AuditService.log()` + `GET /audit-logs` (protegido por GESTOR). Intercepção em controllers de Documento (upload, nova revisão), Aprovações (aprovação/rejeição) e Transmittals (emissão de GRD). Frontend: aba "Trilha de Auditoria" no módulo de Gestão com tabela visual de sistema de segurança.
+- **[ÉPICO 9] Busca Avançada (Filtros da Listagem) (✅ CONCLUÍDO — Fecha a Fase 1):** `GET /documents` aceita query params combináveis `busca` (contains case-insensitive em `codigo`/`titulo`), `disciplinaId` (`contractDisciplineId`) e `pacoteId` (`workPackageId`). Frontend (DocumentList): estados ligados à Toolbar do Acervo Técnico (input de pesquisa + selects de Disciplina e Pacote populados via `/disciplines` e `/work-packages`) com debounce de 400ms. As condições operam em conjunto com o RBAC do Portal do Cliente (PATCH 10.4 — `stage: CLIENTE`).
 - **[DASHBOARD]** KPI consolidados (documentos por disciplina, status, pendências, últimas GRDs).
 
 ---
@@ -84,40 +85,41 @@ Divisão estrita baseada em Domain-Driven Design (DDD):
 
 ## 🚀 Próximas Etapas (Roadmap Prioritário & Plano de Ação)
 
-### FASE 1: Fundações Operacionais e UX Refinada
+### FASE 1: Fundações Operacionais e UX Refinada — ✅ CONCLUÍDA
 
-**ÉPICO 9: Estruturação Hierárquica e Apontamento de Horas** _(🟡 INICIADO — Fase 1)_
-- **Hierarquia Real:** Implementar navegação de pastas/estruturas agrupando Cliente > Projetos > Contrato.
-- **Controle de Horas (Timesheet):** Permitir lançamento de horas trabalhadas por documento para extração de relatórios analíticos pela equipe de Planejamento.
-- **Relacionamentos (Anexos):** Possibilidade de criar vínculos entre documentos (ex: PDF atrelado a uma GRD ou a um modelo 3D).
+**ÉPICO 9: Estruturação Hierárquica e Apontamento de Horas** _(✅ CONCLUÍDO)_
+- **Hierarquia Real:** Navegação de pastas/estruturas agrupando Cliente > Projetos > Contrato (modelos `Project`, `Contract.projectId`).
+- **Controle de Horas (Timesheet):** Lançamento de horas trabalhadas por documento para relatórios analíticos do Planejamento (módulo `timesheets`).
+- **Relacionamentos (Anexos):** Vínculos entre documentos (model `DocumentLink`).
 
-**ÉPICO 10: Fluxograma Visual e Motor de Aprovação Estrito** _(🟡 INICIADO — Fase 1)_
+**ÉPICO 10: Fluxograma Visual e Motor de Aprovação Estrito** _(✅ CONCLUÍDO)_
 - **Fluxograma Interativo:** Botão "Visualizar Fluxo" exibindo graficamente o estado atual: *Elaboração ➔ Verificação ➔ Revisão Verificação ➔ Aprovação ➔ Revisão Aprovação*.
-- **Controle Estrito de Caixa de Comentários:** Na aba do documento, substituir aprovações genéricas por opções exatas: **"Aprovado sem comentários"**, **"Aprovado com comentários"**, e **"Reprovado"**.
-- **Identificação de Atores:** O sistema deve sinalizar visualmente na timeline se o comentário/reprovação foi feito pela equipe interna (Verificador do time) ou pelo Cliente.
+- **Controle Estrito de Caixa de Comentários:** Ações exatas **"Aprovado sem comentários"**, **"Aprovado com comentários"** e **"Reprovado"**.
+- **Identificação de Atores:** Timeline sinaliza visualmente se o comentário/reprovação foi da equipe interna ou do Cliente (`isClient`).
 
-**ÉPICO 12: Trilha de Auditoria (Data Room & Audit Logs)** _(🟡 INICIADO — Fase 1)_
+**ÉPICO 11: Exportação de MDR (Master Document Register)** _(✅ CONCLUÍDO)_
+- Rota backend `GET /documents/export/mdr` gerando planilha Excel (.xlsx) com colunas: Código, Título, Disciplina, Pacote, Revisão Atual, Status do Workflow e Data da Última Revisão.
+- Frontend: botão "Exportar MDR" na toolbar de filtros do DocumentList, download via blob com nomenclatura `MDR_Contrato_Data.xlsx`.
+
+**ÉPICO 12: Trilha de Auditoria (Data Room & Audit Logs)** _(✅ CONCLUÍDO)_
 - **Model `AuditLog`:** Registro imutável de ações críticas com `userId`, `contractId`, `action`, `entity`, `entityId`, `details` (JSON), `ipAddress` e `createdAt`.
 - **Serviço de Auditoria:** Helper síncrono `AuditService.log()` invocado em controllers de Documentos, Aprovações e Transmittals.
 - **Rota `GET /audit-logs`:** Protegida por RBAC (apenas GESTOR), retorna logs do contrato ordenados por data DESC.
 - **Frontend (Data Room):** Aba "Trilha de Auditoria" no módulo de Gestão com tabela visual de segurança (monoespaçada).
 
-**🔒 PENDENTES PARA FECHAR A FASE 1:**
-- **Busca Avançada:** Finalizar filtros por `busca`, `disciplinaId`, e `pacoteId`.
+**Busca Avançada (Filtros da Listagem)** _(✅ CONCLUÍDO — fechou a Fase 1)_
+- `GET /documents` aceita query params combináveis `busca`, `disciplinaId` e `pacoteId`, operando em conjunto com o RBAC do Portal do Cliente (PATCH 10.4).
+- Frontend: input de pesquisa + selects de Disciplina e Pacote na Toolbar do Acervo Técnico, com debounce de 400ms.
 
 ### FASE 2: Inovações para TOP 1 de Mercado (Diferenciais)
 
-**ÉPICO 13: Exportação de MDR (Master Document Register)** _(🟡 INICIADO — Fase 1)_
-- Rota backend `GET /documents/export/mdr` gerando planilha Excel (.xlsx) com colunas: Código, Título, Disciplina, Pacote, Revisão Atual, Status do Workflow e Data da Última Revisão.
-- Frontend: botão "Exportar MDR" na toolbar de filtros do DocumentList, download via blob com nomenclatura `MDR_Contrato_Data.xlsx`.
-
-**ÉPICO 14: OCR Autônomo e Full-Text Search Nativo**
+**ÉPICO 13: OCR Autônomo e Full-Text Search Nativo**
 - Melhorar o Worker Python para realizar a leitura total do PDF (não apenas do selo) de forma silenciosa e autônoma, permitindo que a barra de busca encontre "palavras que contenham dentro do PDF" e retorne o documento na listagem.
 
-**ÉPICO 15: Visualizadores Avançados, Markup e Redlining**
+**ÉPICO 14: Visualizadores Avançados, Markup e Redlining**
 - **PDF Comentado Gerado por IA:** Fazer com que os comentários do verificador gerem automaticamente um novo arquivo concatenado chamado `XXX-XXX-XXX_RX_Comentado.pdf`.
 - **Visualizador DWG:** Integrar um visualizador nativo de arquivos CAD no navegador para complementar a visualização de PDF. (Será refinado caso exija APIs pagas como Autodesk Forge).
 
-**ÉPICO 16: Notificações, Conformidade (ISO 19650) e PWA**
+**ÉPICO 15: Notificações, Conformidade (ISO 19650) e PWA**
 - Implementação de Máscaras de nomenclatura rígidas para o contrato.
 - Acesso Offline via App Progressivo (PWA) e Alertas de Sino/E-mail para os usuários.
