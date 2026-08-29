@@ -86,6 +86,9 @@ export class DocumentService {
       where.OR = [
         { codigoDocumento: { contains: filters.busca, mode: 'insensitive' } },
         { titulo: { contains: filters.busca, mode: 'insensitive' } },
+        // ÉPICO 13: Full-Text Search — encontra documentos onde a palavra está
+        // "dentro do PDF" (texto extraído localmente pelo worker PyMuPDF).
+        { revisions: { some: { extractedText: { contains: filters.busca, mode: 'insensitive' } } } },
       ];
     }
 

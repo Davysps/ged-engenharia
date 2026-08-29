@@ -431,10 +431,13 @@ export const internalUpdateRevision = async (req: AuthRequest, res: Response): P
   }
 };
 
-// NOVO ÉPICO 5: Webhook Recebedor do AWS Textract (Python RPA)
+// ÉPICO 13: Webhook Recebedor do Worker Python (OCR Local / PyMuPDF).
+// Recebe o texto extraído do PDF e grava na Revision, além de atualizar o
+// status de OCR do documento. Retroativo ao ÉPICO 5 (AWS Textract) quando o
+// payload antigo `{ ocrStatus, metadata }` continua sendo aceito.
 export const updateMetadataWebhook = async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
-  const { ocrStatus, metadata } = req.body;
+  const body = req.body ?? {};
 
   // Proteção rigorosa do Serviço Interno
   const secret = req.headers['x-internal-secret'];
@@ -443,6 +446,43 @@ export const updateMetadataWebhook = async (req: Request, res: Response): Promis
     return;
   }
 
+  // ── NOVO FORMATO (ÉPICO 13): { documentId, revisionId, status, extractedText } ──
+  const hasRevisionPayload = typeof body.revisionId === 'number' && !!body.status;
+
+  if (hasRevisionPayload) {
+    try {
+      const revisionId = Number(body.revisionId);
+      const documentId = Number(body.documentId ?? id);
+      const status = body.status === 'FAILED' ? DocumentOcrStatus.FAILED : DocumentOcrStatus.COMPLETED;
+
+      const updated = await prisma.$transaction(async (tx) => {
+        // 1. Grava o texto extraído na revisão correspondente
+        const revision = await tx.revision.update({
+          where: { id: revisionId },
+          data: { extractedText: body.extractedText ?? null },
+          select: { id: true, documentId: true },
+        });
+
+        // 2. Atualiza o status de OCR do documento (mantém o Document como fonte
+        //    para a exibição do badge de OCR no detalhamento)
+        const updatedDocument = await tx.document.update({
+          where: { id: Number(documentId) },
+          data: { ocrStatus: status as DocumentOcrStatus },
+        });
+
+        return { revision, updatedDocument };
+      });
+
+      res.status(200).json(updated);
+    } catch (error) {
+      console.error(`[GED-API] Falha ao gravar texto extraído via Webhook (Doc ID: ${id}):`, error);
+      res.status(500).json({ error: 'Erro interno ao gravar o texto extraído do OCR.' });
+    }
+    return;
+  }
+
+  // ── FORMATO LEGADO (ÉPICO 5): { ocrStatus, metadata } ──
+  const { ocrStatus, metadata } = body;
   try {
     const updatedDocument = await prisma.document.update({
       where: { id: Number(id) },

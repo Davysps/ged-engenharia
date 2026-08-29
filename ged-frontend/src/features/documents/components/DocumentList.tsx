@@ -191,16 +191,19 @@ export function DocumentList() {
         {/* ÉPICO 8: Toolbar de Busca Avançada */}
         <div className="p-4 border-b border-gray-200 bg-white">
           <div className="flex flex-col lg:flex-row gap-3">
-            {/* Pesquisa por código ou título */}
+            {/* Pesquisa por código, título ou conteúdo do PDF */}
             <div className="flex-1 relative">
               <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                placeholder="Pesquisar por código ou título..."
+                placeholder="Buscar por código, título ou conteúdo do PDF..."
                 className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-blue-600 outline-none text-sm"
               />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex items-center text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                ⚡ Full-Text Search Ativo
+              </span>
             </div>
 
             {/* Filtro por Disciplina */}

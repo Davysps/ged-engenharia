@@ -224,6 +224,10 @@ model Revision {
   comments     Json? // Para futuro Markup/Redlining
   createdAt    DateTime       @default(now())
 
+  // ÉPICO 13: Full-Text Search Nativo — texto extraído localmente pelo worker
+  // Python (PyMuPDF) para permitir busca de conteúdo dos PDFs.
+  extractedText String?       @db.Text
+
   // PATCH 10.2: Histórico de aprovações — UM revision pode ter VÁRIOS carimbos
   // (Verificação → Aprovação → Análise do Cliente). Cada carimbo é um registro
   // novo, preservando o histórico e nunca sobrescrevendo o antigo.

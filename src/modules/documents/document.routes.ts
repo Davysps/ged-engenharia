@@ -12,8 +12,10 @@ import { verifyToken } from '../../middlewares/auth.middleware';
 
 const router = Router();
 
-// ÉPICO 5: Webhook Recebedor Interno
+// ÉPICO 5/13: Webhook Recebedor Interno (OCR Local / PyMuPDF)
 // DEVE vir antes das rotas JWT para manter o isolamento de rede Microserviço-Microserviço
+// O worker Python envia via POST; mantém-se o PATCH para retrocompatibilidade (Épico 5).
+router.post('/:id/metadata', updateMetadataWebhook);
 router.patch('/:id/metadata', updateMetadataWebhook);
 
 // ÉPICO 11: Exportação de MDR (Master Document Register)

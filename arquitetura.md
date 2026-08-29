@@ -113,8 +113,9 @@ Divisão estrita baseada em Domain-Driven Design (DDD):
 
 ### FASE 2: Inovações para TOP 1 de Mercado (Diferenciais)
 
-**ÉPICO 13: OCR Autônomo e Full-Text Search Nativo**
+**ÉPICO 13: OCR Autônomo e Full-Text Search Nativo** _(🚀 INICIADO)_
 - Melhorar o Worker Python para realizar a leitura total do PDF (não apenas do selo) de forma silenciosa e autônoma, permitindo que a barra de busca encontre "palavras que contenham dentro do PDF" e retorne o documento na listagem.
+- **Diferencial:** Abandono do AWS Textract (conta com restrições) e adoção do **PyMuPDF** — extração local, ultrarrápida e gratuita diretamente no worker. Texto completo enviado via webhook e gravado na `Revision.extractedText`, habilitando a busca nativa por conteúdo no backend.
 
 **ÉPICO 14: Visualizadores Avançados, Markup e Redlining**
 - **PDF Comentado Gerado por IA:** Fazer com que os comentários do verificador gerem automaticamente um novo arquivo concatenado chamado `XXX-XXX-XXX_RX_Comentado.pdf`.
