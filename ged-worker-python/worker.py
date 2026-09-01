@@ -3,7 +3,7 @@ import json
 import tempfile
 import requests
 import boto3
-import fitz  # PyMuPDF
+import pymupdf  # PyMuPDF
 
 from urllib.parse import urlparse
 from botocore.exceptions import ClientError
@@ -28,7 +28,7 @@ s3 = boto3.client('s3', region_name=AWS_REGION)
 def extract_text_from_pdf(file_path: str) -> str:
     """Usa o PyMuPDF para extrair o texto inteiro de todas as páginas do PDF."""
     extracted_pages = []
-    with fitz.open(file_path) as doc:
+    with pymupdf.open(file_path) as doc:
         for page in doc:
             extracted_pages.append(page.get_text())
     return "\n".join(extracted_pages).strip()
