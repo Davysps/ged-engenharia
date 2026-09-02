@@ -111,9 +111,9 @@ Divisão estrita baseada em Domain-Driven Design (DDD):
 - `GET /documents` aceita query params combináveis `busca`, `disciplinaId` e `pacoteId`, operando em conjunto com o RBAC do Portal do Cliente (PATCH 10.4).
 - Frontend: input de pesquisa + selects de Disciplina e Pacote na Toolbar do Acervo Técnico, com debounce de 400ms.
 
-### FASE 2: Inovações para TOP 1 de Mercado (Diferenciais)
+### FASE de Diferenciais: Inovações para TOP 1 de Mercado
 
-**ÉPICO 13: OCR Autônomo e Full-Text Search Nativo** _(🚀 INICIADO)_
+**ÉPICO 13: OCR Autônomo e Full-Text Search Nativo** _(✅ CONCLUÍDO)_
 - Melhorar o Worker Python para realizar a leitura total do PDF (não apenas do selo) de forma silenciosa e autônoma, permitindo que a barra de busca encontre "palavras que contenham dentro do PDF" e retorne o documento na listagem.
 - **Diferencial:** Abandono do AWS Textract (conta com restrições) e adoção do **PyMuPDF** — extração local, ultrarrápida e gratuita diretamente no worker. Texto completo enviado via webhook e gravado na `Revision.extractedText`, habilitando a busca nativa por conteúdo no backend.
 
@@ -124,3 +124,25 @@ Divisão estrita baseada em Domain-Driven Design (DDD):
 **ÉPICO 15: Notificações, Conformidade (ISO 19650) e PWA**
 - Implementação de Máscaras de nomenclatura rígidas para o contrato.
 - Acesso Offline via App Progressivo (PWA) e Alertas de Sino/E-mail para os usuários.
+
+## Fase 2: Escalonamento Enterprise e Refatoração Arquitetural
+
+**Objetivo:** Preparar o GED para alta volumetria de dados, arquivos pesados e fluxos rígidos de engenharia.
+
+- [ ] **Etapa 2.1: Infraestrutura de Upload (Backend)**
+  - Substituir o upload via `multer` (multipart/form-data) que passa pelo Node.js por **S3 Pre-signed URLs**. O backend apenas gera a URL autorizada e o frontend faz o upload do PDF/DWG direto para o bucket da AWS. Reduz a carga de memória da API a quase zero.
+- [ ] **Etapa 2.2: Isolamento Multi-Tenant (Segurança)**
+  - Implementar middlewares ou extensões no Prisma Client para garantir que o `tenantId` (ID do Contrato/Empresa) seja injetado automaticamente em todas as queries. Impedir vazamento de documentos entre clientes diferentes.
+- [ ] **Etapa 2.3: Reatividade e Cache (Frontend)**
+  - Substituir requisições diretas do Axios pelo **TanStack Query (React Query)** em todas as listagens de documentos e dashboards. Garantir atualizações em background e caching de telas.
+- [ ] **Etapa 2.4: Tabelas de Alta Performance (Frontend)**
+  - Implementar **TanStack Table** (com virtualização de linhas) na tela de Acervo Técnico. A tabela deve ser capaz de carregar e rolar fluidamente um MDR de 10.000 documentos.
+- [ ] **Etapa 2.5: UI Headless e Formulários (Frontend)**
+  - Migrar formulários complexos para `React Hook Form` + `Zod`.
+  - Refinar o design system com base neutra e componentes Radix/Shadcn UI, removendo sombras excessivas e reduzindo a poluição visual.
+- [ ] **Etapa 2.6: Gestão de Acessos (RBAC) e Planejamento**
+  - Travar rotas e botões no frontend com base nos papéis: Planejador, Engenheiro, Coordenador e Gestor.
+  - Desenvolver a interface focada do Planejador (Curva S, importação em massa de MDR e gestão de Pacotes de Trabalho).
+- [ ] **Etapa 2.7: Maturidade do Worker (Python / Extração de Dados)**
+  - Configurar DLQ (Dead Letter Queue) no SQS para tratamento de PDFs corrompidos.
+  - Implementar comunicação do script Python de volta para a API Node via Webhook autenticado, eliminando a dependência do Worker de acessar o banco de dados (Prisma) diretamente.

@@ -117,3 +117,44 @@ export interface DocumentDetail {
   revisions: RevisionDetail[];
   userRole: ContractRole | null;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FASE 2 (Nível Enterprise): S3 Pre-signed URLs
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PresignedUrlResult {
+  uploadUrl: string;
+  fileKey: string;
+  filePath: string;
+  fileHash: string;
+}
+
+// Etapa atual do fluxo de upload em 3 passos (usado para feedback de loading)
+export type UploadPhase = 'presign' | 'upload' | 'register';
+
+export interface CreateDocumentInput {
+  contractId: number;
+  codigoDocumento: string;
+  titulo: string;
+  workPackageId?: number | null;
+  contractDisciplineId?: number | null;
+}
+
+export interface CreateDocumentResponse {
+  id: number;
+  codigoDocumento: string;
+  titulo: string;
+  revisions: {
+    id: number;
+    versionLabel: string;
+    filePath: string;
+    fileHash: string;
+  }[];
+}
+
+export interface CreateRevisionResponse {
+  id: number;
+  versionLabel: string;
+  filePath: string;
+  fileHash: string;
+}

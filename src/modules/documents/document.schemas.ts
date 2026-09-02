@@ -59,9 +59,33 @@ export const uploadDocumentSchema = z.object({
   // ÉPICO 7.5: Vínculos opcionais (string vazia ou ausente = sem vínculo)
   workPackageId: optionalIntFromForm,
   contractDisciplineId: optionalIntFromForm,
+  // FASE 2 (Nível Enterprise): S3 Pre-signed URLs.
+  // O arquivo já está no bucket quando o Backend é notificado; a fileKey
+  // (retornada por POST /documents/presigned-url) é a única referência física.
+  fileKey: z.string().min(1, 'A fileKey do arquivo enviado ao S3 é obrigatória.'),
 });
 
 export type UploadDocumentInput = z.infer<typeof uploadDocumentSchema>;
+
+// ─────────────────────────────────────────────────────────────────────
+// Solicitação de Pre-signed URL (FASE 2 — Nível Enterprise)
+// O Frontend informa apenas nome e tipo do arquivo; o Backend gera a URL
+// PUT autenticada e a fileKey que será usada na etapa de confirmação.
+// ─────────────────────────────────────────────────────────────────────
+export const presignedUrlSchema = z.object({
+  fileName: z
+    .string()
+    .trim()
+    .min(1, 'O nome do arquivo é obrigatório.')
+    .max(255, 'O nome do arquivo deve ter no máximo 255 caracteres.'),
+  fileType: z
+    .string()
+    .trim()
+    .min(1, 'O tipo do arquivo (MIME) é obrigatório.')
+    .max(100, 'O tipo do arquivo (MIME) deve ter no máximo 100 caracteres.'),
+});
+
+export type PresignedUrlInput = z.infer<typeof presignedUrlSchema>;
 
 // ─────────────────────────────────────────────────────────────────────
 // Parâmetro de rota: documentId

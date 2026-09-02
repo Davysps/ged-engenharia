@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { api } from '../../../lib/axios';
+import { documentService } from '../services/document.service';
+import type { UploadPhase } from '../types/document.types';
 import { UploadCloud, FileType, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react';
 
 interface RevisionUploadFormProps {
@@ -10,9 +11,16 @@ interface RevisionUploadFormProps {
   onSuccess?: () => void;
 }
 
+const PHASE_LABELS: Record<UploadPhase, string> = {
+  presign: 'Solicitando URL de upload à AWS...',
+  upload: 'Enviando arquivo para a AWS S3...',
+  register: 'Registrando a nova revisão na base de dados...',
+};
+
 export function RevisionUploadForm({ isOpen, onClose, documentId, codigoDocumento, onSuccess }: RevisionUploadFormProps) {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [phase, setPhase] = useState<UploadPhase>('presign');
   const [message, setMessage] = useState('');
 
   if (!isOpen || !documentId) return null;
@@ -26,17 +34,14 @@ export function RevisionUploadForm({ isOpen, onClose, documentId, codigoDocument
     }
 
     setStatus('loading');
-    
-    const formData = new FormData();
-    formData.append('file', file); // A API pede apenas o 'file' para revisões
+    setPhase('presign');
 
     try {
-      // Faz o POST para o endpoint que acabamos de refatorar no backend!
-      const response = await api.post(`/documents/${documentId}/revisions`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      // FASE 2: pre-signed URL → PUT direto no S3 → registro via fileKey (JSON).
+      // Se o PUT na AWS falhar, o erro propaga e o backend NUNCA é chamado.
+      const response = await documentService.submitRevision(documentId, file, setPhase);
 
-      setMessage(`Sucesso! Nova revisão gerada: ${response.data.versionLabel}`);
+      setMessage(`Sucesso! Nova revisão gerada: ${response.versionLabel}`);
       setStatus('success');
       
       setTimeout(() => {
@@ -94,6 +99,13 @@ export function RevisionUploadForm({ isOpen, onClose, documentId, codigoDocument
             <div className="flex items-center gap-2 p-3 text-red-700 bg-red-50 rounded-lg text-sm border border-red-200">
               <AlertCircle className="w-5 h-5 shrink-0" />
               <p>{message}</p>
+            </div>
+          )}
+
+          {status === 'loading' && (
+            <div className="flex items-center gap-2 p-3 text-indigo-700 bg-indigo-50 rounded-lg text-sm border border-indigo-200">
+              <Loader2 className="w-5 h-5 shrink-0 animate-spin" />
+              <p>{PHASE_LABELS[phase]}</p>
             </div>
           )}
 

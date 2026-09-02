@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../../lib/axios';
 import { useContract } from '../../../contexts/ContractContext';
 import { usePlanning } from '../../planning/hooks/usePlanning';
 import { useDisciplines } from '../../management/hooks/useDisciplines';
+import { documentService } from '../services/document.service';
+import type { UploadPhase } from '../types/document.types';
 import { UploadCloud, FileType, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react';
 
 interface UploadFormProps {
@@ -11,6 +12,12 @@ interface UploadFormProps {
   // Prop futura para atualizar a lista automaticamente após o sucesso
   onSuccess?: () => void; 
 }
+
+const PHASE_LABELS: Record<UploadPhase, string> = {
+  presign: 'Solicitando URL de upload à AWS...',
+  upload: 'Enviando arquivo para a AWS S3...',
+  register: 'Registrando documento na base de dados...',
+};
 
 export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
   // Pegamos o contrato atual direto do contexto! O usuário não precisa mais digitar.
@@ -35,6 +42,7 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
   const [contractDisciplineId, setContractDisciplineId] = useState('');
   
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [phase, setPhase] = useState<UploadPhase>('presign');
   const [message, setMessage] = useState('');
 
   if (!isOpen || !contract) return null;
@@ -48,23 +56,24 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
     }
 
     setStatus('loading');
-    
-    const formData = new FormData();
-    // Usamos o ID que veio da URL de forma segura
-    formData.append('contractId', contract.id.toString());
-    formData.append('codigoDocumento', codigoDocumento);
-    formData.append('titulo', titulo);
-    // ÉPICO 7.5: IDs chegam como string via FormData (o backend converte para Int)
-    if (workPackageId) formData.append('workPackageId', workPackageId);
-    if (contractDisciplineId) formData.append('contractDisciplineId', contractDisciplineId);
-    formData.append('file', file);
+    setPhase('presign');
 
     try {
-      const response = await api.post('/documents/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      // FASE 2: pre-signed URL → PUT direto no S3 → registro via fileKey (JSON).
+      // Se o PUT na AWS falhar, o erro propaga e o backend NUNCA é chamado.
+      const response = await documentService.submitDocument(
+        file,
+        {
+          contractId: Number(contract.id),
+          codigoDocumento,
+          titulo,
+          workPackageId: workPackageId ? Number(workPackageId) : null,
+          contractDisciplineId: contractDisciplineId ? Number(contractDisciplineId) : null,
+        },
+        setPhase
+      );
 
-      setMessage(`Sucesso! Arquivo salvo na AWS S3: ${response.data.revisions[0].filePath}`);
+      setMessage(`Sucesso! Arquivo salvo na AWS S3: ${response.revisions[0].filePath}`);
       setStatus('success');
       
       // Espera 2 segundos, limpa e fecha o modal
@@ -180,6 +189,13 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
             <div className="flex items-center gap-2 p-3 text-red-700 bg-red-50 rounded-lg text-sm border border-red-200">
               <AlertCircle className="w-5 h-5 shrink-0" />
               <p>{message}</p>
+            </div>
+          )}
+
+          {status === 'loading' && (
+            <div className="flex items-center gap-2 p-3 text-blue-700 bg-blue-50 rounded-lg text-sm border border-blue-200">
+              <Loader2 className="w-5 h-5 shrink-0 animate-spin" />
+              <p>{PHASE_LABELS[phase]}</p>
             </div>
           )}
 

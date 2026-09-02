@@ -1,18 +1,21 @@
 import type { Request, Response } from 'express';
 import { RevisionStatus, ApprovalStatus, ApprovalStage, DocumentOcrStatus } from '@prisma/client';
 import { prisma } from '../../prisma';
-import { uploadFileToS3 } from '../../services/s3.service';
+import { generatePresignedUploadUrl, resolveFileReferences, uploadFileToS3 } from '../../services/s3.service';
 import type { AuthRequest } from '../../middlewares/auth.middleware';
 import { sendToOcrQueue } from '../../services/sqs.service';
 import { DocumentService } from './document.service';
-import { uploadDocumentSchema, documentListQuerySchema } from './document.schemas';
+import {
+  uploadDocumentSchema,
+  presignedUrlSchema,
+  documentListQuerySchema,
+} from './document.schemas';
 import { AuditService } from '../audit/audit.service';
 
 export const uploadDocument = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const parsed = uploadDocumentSchema.parse(req.body);
-    const { contractId, codigoDocumento, titulo } = parsed;
-    const file = req.file;
+    const { contractId, codigoDocumento, titulo, fileKey } = parsed;
     const userId = req.userId;
 
     // ÉPICO 7.5: Vínculos opcionais de Planejamento e Disciplina do Contrato
@@ -25,12 +28,14 @@ export const uploadDocument = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    if (!file) {
+    if (!fileKey) {
       res.status(400).json({ error: 'Nenhum ficheiro técnico foi submetido.' });
       return;
     }
 
-    const { filePath, fileHash } = await uploadFileToS3(file.buffer, file.originalname, file.mimetype);
+    // FASE 2 (Nível Enterprise): o arquivo já está no S3 (PUT direto via
+    // pre-signed URL). O Backend apenas regista a fileKey como referência.
+    const { filePath, fileHash } = resolveFileReferences(fileKey);
 
     const newDocument = await prisma.document.create({
       data: {
@@ -100,10 +105,37 @@ export const uploadDocument = async (req: AuthRequest, res: Response): Promise<v
   }
 };
 
+// ── FASE 2 (Nível Enterprise): S3 PRE-SIGNED URL ─────────────────────
+// POST /documents/presigned-url
+// O Frontend informa nome e MIME type do arquivo; o Backend gera uma URL
+// PUT autenticada no bucket S3 (expiração de 15 min) e a fileKey que o
+// Frontend deverá enviar de volta na etapa de confirmação do upload.
+export const createPresignedUrl = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.userId;
+
+    if (!userId) {
+      res.status(401).json({ error: 'Usuário não autenticado.' });
+      return;
+    }
+
+    const parsed = presignedUrlSchema.parse(req.body);
+    const result = await generatePresignedUploadUrl(parsed.fileName, parsed.fileType);
+
+    res.status(200).json(result);
+  } catch (error: any) {
+    if (error?.name === 'ZodError') {
+      res.status(400).json({ error: error.issues?.map((i: any) => i.message).join('; ') || 'Payload inválido.' });
+      return;
+    }
+    console.error('[GED Engenharia] Erro ao gerar pre-signed URL do upload:', error);
+    res.status(500).json({ error: 'Erro interno ao gerar a URL de upload.' });
+  }
+};
+
 export const uploadRevision = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const documentId = Number(req.params.id);
-    const file = req.file;
     const userId = req.userId;
 
     if (!userId) {
@@ -116,7 +148,10 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    if (!file) {
+    // FASE 2 (Nível Enterprise): o body carrega a fileKey (JSON, não mais
+    // multipart via multer) — o arquivo já foi enviado direto ao S3.
+    const fileKey = (req.body?.fileKey ?? '').trim();
+    if (!fileKey) {
       res.status(400).json({ error: 'Nenhum arquivo físico foi submetido.' });
       return;
     }
@@ -191,7 +226,7 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
     
     const nextVersionLabel = `R${nextVersionNumber}`;
 
-    const { filePath, fileHash } = await uploadFileToS3(file.buffer, file.originalname, file.mimetype);
+    const { filePath, fileHash } = resolveFileReferences(fileKey);
 
     const newRevision = await prisma.$transaction(async (tx) => {
       
