@@ -158,3 +158,32 @@ export interface CreateRevisionResponse {
   filePath: string;
   fileHash: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Document List (Acervo Técnico — listagem densa)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface DocumentListItemRevision {
+  id: number;
+  versionLabel: string;
+  filePath: string;
+  createdAt: string;
+}
+
+export interface DocumentListItem {
+  id: number;
+  codigoDocumento: string;
+  titulo: string;
+  ocrStatus: DocumentOcrStatus;
+  projectNumber: string | null;
+  extractedRevision: string | null;
+  contractDiscipline: ContractDisciplineRef | null;
+  workPackage: WorkPackageRef | null;
+  revisions: DocumentListItemRevision[];
+}
+
+export interface DocumentListFilters {
+  busca?: string;
+  disciplinaId?: string;
+  pacoteId?: string;
+}

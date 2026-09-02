@@ -5,6 +5,8 @@ import type {
   CreateDocumentResponse,
   CreateRevisionResponse,
   DocumentDetail,
+  DocumentListFilters,
+  DocumentListItem,
   PresignedUrlResult,
   UploadPhase,
 } from '../types/document.types';
@@ -27,6 +29,23 @@ export const documentService = {
    */
   async getById(id: number): Promise<DocumentDetail> {
     const response = await api.get<DocumentDetail>(`/documents/${id}`);
+    return response.data;
+  },
+
+  /**
+   * Lista os documentos do Acervo Técnico de um contrato (tenant), com os
+   * filtros de busca avançada (texto, disciplina e pacote de trabalho).
+   */
+  async listByContract(
+    contractId: number,
+    filters: DocumentListFilters = {}
+  ): Promise<DocumentListItem[]> {
+    const params: Record<string, string> = {};
+    if (filters.busca?.trim()) params.busca = filters.busca.trim();
+    if (filters.disciplinaId) params.disciplinaId = filters.disciplinaId;
+    if (filters.pacoteId) params.pacoteId = filters.pacoteId;
+
+    const response = await api.get<DocumentListItem[]>(`/projects/${contractId}/documents`, { params });
     return response.data;
   },
 
