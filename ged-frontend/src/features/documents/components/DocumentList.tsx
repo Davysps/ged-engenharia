@@ -13,7 +13,7 @@ import { usePlanning } from '../../planning/hooks/usePlanning';
 import { useDisciplines } from '../../management/hooks/useDisciplines';
 import { useDocumentsQuery } from '../hooks/useDocumentsQuery';
 import {
-  FileText, UploadCloud, Eye, History, Clock, CheckCircle, AlertCircle,
+  FileText, UploadCloud, Eye, History,
   Search, FilterX, Package, Download, MoreHorizontal, FilePenLine,
 } from 'lucide-react';
 import { UploadForm } from './UploadForm';
@@ -28,32 +28,6 @@ import type { DocumentListItem } from '../types/document.types';
 // ─────────────────────────────────────────────────────────────────────────────
 // Colunas da tabela (definidas uma única vez; semântica pura, sem closures list)
 const columnHelper = createColumnHelper<DocumentListItem>();
-
-const renderOcrStatus = (status: string) => {
-  switch (status) {
-    case 'PENDING':
-    case 'PROCESSING':
-      return (
-        <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 text-[11px] rounded font-medium whitespace-nowrap">
-          <Clock className="w-3 h-3 text-amber-500" /> A Extrair RPA...
-        </span>
-      );
-    case 'COMPLETED':
-      return (
-        <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[11px] rounded font-medium whitespace-nowrap">
-          <CheckCircle className="w-3 h-3 text-emerald-500" /> Metadados Lidos
-        </span>
-      );
-    case 'FAILED':
-      return (
-        <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 text-[11px] rounded font-medium whitespace-nowrap">
-          <AlertCircle className="w-3 h-3 text-red-500" /> Falha no OCR
-        </span>
-      );
-    default:
-      return null;
-  }
-};
 
 export function DocumentList() {
   const { contract, role } = useContract();
@@ -262,11 +236,6 @@ export function DocumentList() {
           </span>
         ) : null;
       },
-    }),
-    columnHelper.accessor('ocrStatus', {
-      id: 'ocrStatus',
-      header: () => <span>Status RPA/OCR</span>,
-      cell: ({ getValue }) => renderOcrStatus(getValue() as string),
     }),
     columnHelper.display({
       id: 'actions',

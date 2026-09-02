@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import type { FC, FormEvent } from 'react';
+import type { FC } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { usePlanning } from '../hooks/usePlanning';
 import { WORK_PACKAGE_STATUS_CONFIG } from '../types/planning.types';
 import type {
@@ -20,6 +22,43 @@ const STATUS_OPTIONS = Object.keys(WORK_PACKAGE_STATUS_CONFIG) as WorkPackageSta
 /** Converte ISO string do backend em valor aceito por <input type="date"> (YYYY-MM-DD). */
 const toDateInputValue = (iso: string): string => iso.slice(0, 10);
 
+// ─── Schema de validação (cliente) ────────────────────────────────────────
+// Espelha o workPackageSchema do backend: nome obrigatório, datas válidas e
+// garantia de que a data de fim não seja anterior à data de início.
+const workPackageSchema = z
+  .object({
+    nome: z
+      .string()
+      .trim()
+      .min(1, 'O nome do pacote de trabalho é obrigatório.')
+      .max(255, 'O nome deve ter no máximo 255 caracteres.'),
+    descricao: z
+      .string()
+      .max(2000, 'A descrição deve ter no máximo 2000 caracteres.'),
+    dataInicio: z
+      .string()
+      .min(1, 'Informe a data de início.')
+      .refine((value) => !isNaN(Date.parse(value)), {
+        message: 'Informe uma data de início válida.',
+      }),
+    dataFim: z
+      .string()
+      .min(1, 'Informe a data de fim.')
+      .refine((value) => !isNaN(Date.parse(value)), {
+        message: 'Informe uma data de fim válida.',
+      }),
+    status: z.enum(
+      ['PENDENTE', 'EM_ANDAMENTO', 'CONCLUIDO', 'ATRASADO', 'CANCELADO'],
+      { message: 'Selecione um status válido.' }
+    ),
+  })
+  .refine((data) => !data.dataInicio || !data.dataFim || data.dataFim >= data.dataInicio, {
+    message: 'A data de fim não pode ser anterior à data de início.',
+    path: ['dataFim'],
+  });
+
+type WorkPackageFormValues = z.infer<typeof workPackageSchema>;
+
 /**
  * Formulário para criar ou editar um Pacote de Trabalho.
  * Reutilizável: modo "create" (sem `workPackage`) e modo "edit" (com `workPackage`).
@@ -33,24 +72,29 @@ export const WorkPackageForm: FC<WorkPackageFormProps> = ({
   const isEdit = Boolean(workPackage);
   const { createWorkPackage, updateWorkPackage, isLoading } = usePlanning(contractId);
 
-  const [nome, setNome] = useState(workPackage?.nome ?? '');
-  const [descricao, setDescricao] = useState(workPackage?.descricao ?? '');
-  const [dataInicio, setDataInicio] = useState(
-    workPackage ? toDateInputValue(workPackage.dataInicio) : ''
-  );
-  const [dataFim, setDataFim] = useState(
-    workPackage ? toDateInputValue(workPackage.dataFim) : ''
-  );
-  const [status, setStatus] = useState<WorkPackageStatus>(workPackage?.status ?? 'PENDENTE');
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<WorkPackageFormValues>({
+    resolver: zodResolver(workPackageSchema),
+    defaultValues: {
+      nome: workPackage?.nome ?? '',
+      descricao: workPackage?.descricao ?? '',
+      dataInicio: workPackage ? toDateInputValue(workPackage.dataInicio) : '',
+      dataFim: workPackage ? toDateInputValue(workPackage.dataFim) : '',
+      status: workPackage?.status ?? 'PENDENTE',
+    },
+    mode: 'onTouched',
+  });
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleFormSubmit = async (values: WorkPackageFormValues) => {
     const data: WorkPackageFormInput = {
-      nome,
-      descricao,
-      dataInicio,
-      dataFim,
-      status,
+      nome: values.nome,
+      descricao: values.descricao,
+      dataInicio: values.dataInicio,
+      dataFim: values.dataFim,
+      status: values.status,
     };
     try {
       if (isEdit && workPackage) {
@@ -65,16 +109,19 @@ export const WorkPackageForm: FC<WorkPackageFormProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4" noValidate>
       <div>
         <label className="block text-sm font-medium text-gray-700">Nome</label>
         <input
           type="text"
-          value={nome}
-          onChange={(e) => setNome(e.target.value)}
-          required
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          {...register('nome')}
+          className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+            errors.nome ? 'border-red-400' : 'border-gray-300'
+          }`}
         />
+        {errors.nome && (
+          <span className="text-xs text-red-500 mt-1 block">{errors.nome.message}</span>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -82,29 +129,34 @@ export const WorkPackageForm: FC<WorkPackageFormProps> = ({
           <label className="block text-sm font-medium text-gray-700">Data de Início</label>
           <input
             type="date"
-            value={dataInicio}
-            onChange={(e) => setDataInicio(e.target.value)}
-            required
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            {...register('dataInicio')}
+            className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+              errors.dataInicio ? 'border-red-400' : 'border-gray-300'
+            }`}
           />
+          {errors.dataInicio && (
+            <span className="text-xs text-red-500 mt-1 block">{errors.dataInicio.message}</span>
+          )}
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700">Data de Fim</label>
           <input
             type="date"
-            value={dataFim}
-            onChange={(e) => setDataFim(e.target.value)}
-            required
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            {...register('dataFim')}
+            className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+              errors.dataFim ? 'border-red-400' : 'border-gray-300'
+            }`}
           />
+          {errors.dataFim && (
+            <span className="text-xs text-red-500 mt-1 block">{errors.dataFim.message}</span>
+          )}
         </div>
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700">Status</label>
         <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value as WorkPackageStatus)}
+          {...register('status')}
           className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
         >
           {STATUS_OPTIONS.map((option) => (
@@ -118,11 +170,15 @@ export const WorkPackageForm: FC<WorkPackageFormProps> = ({
       <div>
         <label className="block text-sm font-medium text-gray-700">Descrição</label>
         <textarea
-          value={descricao}
-          onChange={(e) => setDescricao(e.target.value)}
+          {...register('descricao')}
           rows={3}
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+            errors.descricao ? 'border-red-400' : 'border-gray-300'
+          }`}
         />
+        {errors.descricao && (
+          <span className="text-xs text-red-500 mt-1 block">{errors.descricao.message}</span>
+        )}
       </div>
 
       <div className="flex justify-end space-x-3">

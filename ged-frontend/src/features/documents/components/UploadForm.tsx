@@ -1,4 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { useContract } from '../../../contexts/ContractContext';
 import { usePlanning } from '../../planning/hooks/usePlanning';
 import { useDisciplines } from '../../management/hooks/useDisciplines';
@@ -10,7 +13,7 @@ interface UploadFormProps {
   isOpen: boolean;
   onClose: () => void;
   // Prop futura para atualizar a lista automaticamente após o sucesso
-  onSuccess?: () => void; 
+  onSuccess?: () => void;
 }
 
 const PHASE_LABELS: Record<UploadPhase, string> = {
@@ -18,6 +21,28 @@ const PHASE_LABELS: Record<UploadPhase, string> = {
   upload: 'Enviando arquivo para a AWS S3...',
   register: 'Registrando documento na base de dados...',
 };
+
+// ─── Schema de validação (cliente) ────────────────────────────────────────
+// Espelha as regras do backend (document.schemas.ts) para prevenir erros
+// antes de qualquer requisição: código, título e arquivo físico.
+const uploadSchema = z.object({
+  codigoDocumento: z
+    .string()
+    .trim()
+    .min(1, 'O código do documento é obrigatório.')
+    .max(255, 'O código do documento deve ter no máximo 255 caracteres.'),
+  titulo: z
+    .string()
+    .trim()
+    .min(1, 'O título do documento é obrigatório.')
+    .max(500, 'O título do documento deve ter no máximo 500 caracteres.'),
+  // Vínculos opcionais (string vazia = sem vínculo), convertidos no submit.
+  workPackageId: z.string(),
+  contractDisciplineId: z.string(),
+  file: z.instanceof(File, { message: 'Selecione um arquivo técnico para upload.' }),
+});
+
+type UploadFormValues = z.infer<typeof uploadSchema>;
 
 export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
   // Pegamos o contrato atual direto do contexto! O usuário não precisa mais digitar.
@@ -28,6 +53,10 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
   const { workPackages, fetchWorkPackages } = usePlanning(contractId);
   const { disciplines, fetchDisciplines } = useDisciplines(contractId);
 
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [phase, setPhase] = useState<UploadPhase>('presign');
+  const [message, setMessage] = useState('');
+
   useEffect(() => {
     if (contractId) {
       fetchWorkPackages();
@@ -35,26 +64,35 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
     }
   }, [contractId, fetchWorkPackages, fetchDisciplines]);
 
-  const [file, setFile] = useState<File | null>(null);
-  const [codigoDocumento, setCodigoDocumento] = useState('');
-  const [titulo, setTitulo] = useState('');
-  const [workPackageId, setWorkPackageId] = useState('');
-  const [contractDisciplineId, setContractDisciplineId] = useState('');
-  
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [phase, setPhase] = useState<UploadPhase>('presign');
-  const [message, setMessage] = useState('');
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { errors, isSubmitting },
+  } = useForm<UploadFormValues>({
+    resolver: zodResolver(uploadSchema),
+    defaultValues: {
+      codigoDocumento: '',
+      titulo: '',
+      workPackageId: '',
+      contractDisciplineId: '',
+    },
+    mode: 'onTouched',
+  });
+
+  const file = watch('file');
 
   if (!isOpen || !contract) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!file) {
-      setMessage('Por favor, selecione um arquivo técnico.');
-      setStatus('error');
-      return;
-    }
+  const closeAndReset = () => {
+    setStatus('idle');
+    setMessage('');
+    reset();
+    onClose();
+  };
 
+  const onSubmit = async (data: UploadFormValues) => {
     setStatus('loading');
     setPhase('presign');
 
@@ -62,35 +100,29 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
       // FASE 2: pre-signed URL → PUT direto no S3 → registro via fileKey (JSON).
       // Se o PUT na AWS falhar, o erro propaga e o backend NUNCA é chamado.
       const response = await documentService.submitDocument(
-        file,
+        data.file,
         {
           contractId: Number(contract.id),
-          codigoDocumento,
-          titulo,
-          workPackageId: workPackageId ? Number(workPackageId) : null,
-          contractDisciplineId: contractDisciplineId ? Number(contractDisciplineId) : null,
+          codigoDocumento: data.codigoDocumento,
+          titulo: data.titulo,
+          workPackageId: data.workPackageId ? Number(data.workPackageId) : null,
+          contractDisciplineId: data.contractDisciplineId ? Number(data.contractDisciplineId) : null,
         },
         setPhase
       );
 
       setMessage(`Sucesso! Arquivo salvo na AWS S3: ${response.revisions[0].filePath}`);
       setStatus('success');
-      
+
       // Espera 2 segundos, limpa e fecha o modal
       setTimeout(() => {
-        setFile(null);
-        setCodigoDocumento('');
-        setTitulo('');
-        setWorkPackageId('');
-        setContractDisciplineId('');
-        setStatus('idle');
+        closeAndReset();
         if (onSuccess) onSuccess();
-        onClose();
       }, 2000);
-      
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      setMessage(error.response?.data?.error || 'Erro ao comunicar com o servidor AWS.');
+      const errorData = (error as { response?: { data?: { error?: string } } })?.response?.data;
+      setMessage(errorData?.error || 'Erro ao comunicar com o servidor AWS.');
       setStatus('error');
     }
   };
@@ -98,8 +130,8 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-2xl relative animate-in fade-in zoom-in-95 duration-200">
-        
-        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors">
+
+        <button onClick={closeAndReset} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors">
           <X className="w-6 h-6" />
         </button>
 
@@ -113,23 +145,35 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Cód. Documento</label>
-              <input 
-                type="text" required value={codigoDocumento} onChange={(e) => setCodigoDocumento(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 outline-none"
+              <input
+                type="text"
+                {...register('codigoDocumento')}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600 outline-none ${
+                  errors.codigoDocumento ? 'border-red-400' : 'border-gray-300'
+                }`}
                 placeholder="VALE-CIV-002"
               />
+              {errors.codigoDocumento && (
+                <span className="text-xs text-red-500 mt-1 block">{errors.codigoDocumento.message}</span>
+              )}
             </div>
             <div className="col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Título do Arquivo</label>
-              <input 
-                type="text" required value={titulo} onChange={(e) => setTitulo(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 outline-none"
+              <input
+                type="text"
+                {...register('titulo')}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600 outline-none ${
+                  errors.titulo ? 'border-red-400' : 'border-gray-300'
+                }`}
                 placeholder="Planta Baixa - Setor B"
               />
+              {errors.titulo && (
+                <span className="text-xs text-red-500 mt-1 block">{errors.titulo.message}</span>
+              )}
             </div>
           </div>
 
@@ -137,7 +181,7 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Disciplina do Contrato</label>
               <select
-                value={contractDisciplineId} onChange={(e) => setContractDisciplineId(e.target.value)}
+                {...register('contractDisciplineId')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 outline-none bg-white"
               >
                 <option value="">Sem disciplina</option>
@@ -151,7 +195,7 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Pacote de Trabalho</label>
               <select
-                value={workPackageId} onChange={(e) => setWorkPackageId(e.target.value)}
+                {...register('workPackageId')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 outline-none bg-white"
               >
                 <option value="">Sem pacote de trabalho</option>
@@ -166,7 +210,9 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Arquivo Técnico Físico</label>
-            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition">
+            <label className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition ${
+              errors.file ? 'border-red-400' : 'border-gray-300'
+            }`}>
               <div className="flex flex-col items-center justify-center pt-5 pb-6">
                 {file ? (
                   <>
@@ -181,8 +227,15 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
                   </>
                 )}
               </div>
-              <input type="file" className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} required />
+              <input
+                type="file"
+                className="hidden"
+                {...register('file')}
+              />
             </label>
+            {errors.file && (
+              <span className="text-xs text-red-500 mt-1 block">{errors.file.message}</span>
+            )}
           </div>
 
           {status === 'error' && (
@@ -208,16 +261,16 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
 
           <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-gray-100">
             <button
-              type="button" onClick={onClose} disabled={status === 'loading'}
+              type="button" onClick={closeAndReset} disabled={isSubmitting}
               className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
             >
               Cancelar
             </button>
             <button
-              type="submit" disabled={status === 'loading'}
+              type="submit" disabled={isSubmitting}
               className="flex justify-center items-center py-2 px-6 rounded-lg font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-70 transition-all"
             >
-              {status === 'loading' ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Arquivar no S3'}
+              {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Arquivar no S3'}
             </button>
           </div>
         </form>

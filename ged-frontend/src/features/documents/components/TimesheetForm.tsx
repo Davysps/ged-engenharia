@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import type { FC, FormEvent } from 'react';
+import type { FC } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import type { TimeLogFormValues } from '../types/timesheet.types';
 import { Loader2, PlusCircle } from 'lucide-react';
 
@@ -9,6 +11,32 @@ interface TimesheetFormProps {
   isSubmitting: boolean;
   error: string | null;
 }
+
+// ─── Schema de validação (cliente) ────────────────────────────────────────
+// Espelha o timeLogBaseSchema do backend: horas (0 < h <= 24), data válida
+// e descrição obrigatória (máx. 2000 caracteres).
+const timesheetSchema = z.object({
+  data: z
+    .string()
+    .min(1, 'Informe a data do apontamento.')
+    .refine((value) => !isNaN(Date.parse(value)), {
+      message: 'Informe uma data válida.',
+    }),
+  horas: z
+    .string()
+    .min(1, 'Informe a quantidade de horas.')
+    .refine((value) => {
+      const n = Number(value);
+      return !Number.isNaN(n) && n > 0 && n <= 24;
+    }, 'A quantidade de horas deve estar entre 0.5 e 24 por lançamento.'),
+  descricao: z
+    .string()
+    .trim()
+    .min(1, 'A descrição do apontamento é obrigatória.')
+    .max(2000, 'A descrição deve ter no máximo 2000 caracteres.'),
+});
+
+type TimesheetFormValues = z.infer<typeof timesheetSchema>;
 
 /**
  * Formulário de Apontamento de Horas (Épico 9).
@@ -25,22 +53,29 @@ export const TimesheetForm: FC<TimesheetFormProps> = ({
   isSubmitting,
   error,
 }) => {
-  const [data, setData] = useState('');
-  const [horas, setHoras] = useState('');
-  const [descricao, setDescricao] = useState('');
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<TimesheetFormValues>({
+    resolver: zodResolver(timesheetSchema),
+    defaultValues: {
+      data: '',
+      horas: '',
+      descricao: '',
+    },
+    mode: 'onTouched',
+  });
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
+  const handleFormSubmit = async (values: TimesheetFormValues) => {
     try {
       await onSubmit({
-        data,
-        horas: Number(horas),
-        descricao,
+        data: values.data,
+        horas: Number(values.horas),
+        descricao: values.descricao,
       });
-      setData('');
-      setHoras('');
-      setDescricao('');
+      reset();
       onSuccess?.();
     } catch {
       // Erro já tratado no hook via state (`error`)
@@ -48,7 +83,7 @@ export const TimesheetForm: FC<TimesheetFormProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4" noValidate>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
@@ -56,11 +91,14 @@ export const TimesheetForm: FC<TimesheetFormProps> = ({
           </label>
           <input
             type="date"
-            value={data}
-            onChange={(e) => setData(e.target.value)}
-            required
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            {...register('data')}
+            className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+              errors.data ? 'border-red-400' : 'border-gray-300'
+            }`}
           />
+          {errors.data && (
+            <span className="text-xs text-red-500 mt-1 block">{errors.data.message}</span>
+          )}
         </div>
 
         <div>
@@ -72,12 +110,15 @@ export const TimesheetForm: FC<TimesheetFormProps> = ({
             step="0.5"
             min="0.5"
             max="24"
-            value={horas}
-            onChange={(e) => setHoras(e.target.value)}
-            required
+            {...register('horas')}
             placeholder="Ex: 4.5"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+              errors.horas ? 'border-red-400' : 'border-gray-300'
+            }`}
           />
+          {errors.horas && (
+            <span className="text-xs text-red-500 mt-1 block">{errors.horas.message}</span>
+          )}
         </div>
       </div>
 
@@ -86,14 +127,17 @@ export const TimesheetForm: FC<TimesheetFormProps> = ({
           Descrição
         </label>
         <textarea
-          value={descricao}
-          onChange={(e) => setDescricao(e.target.value)}
+          {...register('descricao')}
           rows={2}
-          required
           maxLength={2000}
           placeholder="Descreva a atividade realizada..."
-          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+            errors.descricao ? 'border-red-400' : 'border-gray-300'
+          }`}
         />
+        {errors.descricao && (
+          <span className="text-xs text-red-500 mt-1 block">{errors.descricao.message}</span>
+        )}
       </div>
 
       {error && (
