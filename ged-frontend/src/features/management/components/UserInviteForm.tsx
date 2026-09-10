@@ -9,7 +9,7 @@ interface UserInviteFormProps {
   onCancel?: () => void;
 }
 
-const ROLES = ['GESTOR', 'ENGENHEIRO', 'APROVADOR', 'LEITOR'] as const;
+const ROLES = ['GESTOR', 'COORDENADOR', 'ENGENHEIRO', 'PLANEJADOR', 'LEITOR'] as const;
 
 /**
  * Formulário para convidar (invite) um novo usuário para o contrato.

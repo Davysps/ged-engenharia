@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../lib/axios';
 
 // Tipagem rigorosa para o RBAC
-export type ContractRole = 'GESTOR' | 'ENGENHEIRO' | 'APROVADOR' | 'LEITOR';
+export type ContractRole = 'GESTOR' | 'COORDENADOR' | 'ENGENHEIRO' | 'PLANEJADOR' | 'LEITOR';
 
 export interface Contract {
   id: string;

@@ -10,7 +10,7 @@
 
 export type GlobalRole = 'SYSADMIN' | 'USER';
 
-export type ContractRole = 'GESTOR' | 'ENGENHEIRO' | 'APROVADOR' | 'LEITOR';
+export type ContractRole = 'GESTOR' | 'COORDENADOR' | 'ENGENHEIRO' | 'PLANEJADOR' | 'LEITOR';
 
 export type RevisionStatus =
   | 'EM_ELABORACAO'
@@ -39,5 +39,3 @@ export type Discipline =
   | 'OUTRO';
 
 export type TransmittalStatus = 'EM_PROCESSAMENTO' | 'CONCLUIDO' | 'ERRO';
-
-export type DocumentOcrStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useContract } from '../../../contexts/ContractContext';
 import { api } from '../../../lib/axios'; // <-- Importação da nossa instância configurada do Axios
-import { useAuth } from '../../../contexts/AuthContext';
+import { usePermissions } from '../../../hooks/usePermissions';
 import { documentService } from '../services/document.service';
 import { CheckCircle, XCircle, Clock, FileSignature, AlertCircle, ChevronDown, MessageSquare, Loader2, Paperclip } from 'lucide-react';
 import type { ApprovalStatus } from '../../../types/prisma-types';
@@ -29,8 +29,8 @@ const STAGE_BADGE: Record<PendingApproval['stage'], { bg: string; text: string }
 
 export function ApprovalDashboard() {
   const { contract, role } = useContract();
-  const { user } = useAuth();
-  const isClientUser = user?.isClient ?? false;
+  // Etapa 2.6: RBAC — PLANEJADOR não aprova; ENGENHEIRO decide apenas Verificação.
+  const { isClient, canViewApprovals, canDecideAtStage } = usePermissions();
   const [pendingDocs, setPendingDocs] = useState<PendingApproval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -43,13 +43,9 @@ export function ApprovalDashboard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // RBAC de Segurança no Frontend
-  const canApproveInternal = role === 'GESTOR' || role === 'APROVADOR';
-  const canView = canApproveInternal || isClientUser;
+  const canView = canViewApprovals || isClient;
 
-  const canActOn = (doc: PendingApproval) => {
-    if (doc.stage === 'CLIENTE') return isClientUser;
-    return canApproveInternal && !isClientUser;
-  };
+  const canActOn = (doc: PendingApproval) => canDecideAtStage(doc.stage);
 
   // Buscar pendências reais do backend assim que o contrato ativo mudar
   useEffect(() => {
@@ -72,7 +68,7 @@ export function ApprovalDashboard() {
     }
 
     fetchApprovals();
-  }, [contract?.id, role, isClientUser, canView]);
+  }, [contract?.id, canView]);
 
   const resetPanel = () => {
     setOpenId(null);

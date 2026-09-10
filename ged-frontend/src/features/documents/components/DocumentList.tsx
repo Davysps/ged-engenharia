@@ -9,6 +9,7 @@ import {
   type Row,
 } from '@tanstack/react-table';
 import { useContract } from '../../../contexts/ContractContext';
+import { usePermissions } from '../../../hooks/usePermissions';
 import { usePlanning } from '../../planning/hooks/usePlanning';
 import { useDisciplines } from '../../management/hooks/useDisciplines';
 import { useDocumentsQuery } from '../hooks/useDocumentsQuery';
@@ -30,8 +31,9 @@ import type { DocumentListItem } from '../types/document.types';
 const columnHelper = createColumnHelper<DocumentListItem>();
 
 export function DocumentList() {
-  const { contract, role } = useContract();
+  const { contract } = useContract();
   const contractId = Number(contract?.id ?? 0);
+  const { canCreateDocument, canUploadRevision } = usePermissions();
 
   // ÉPICO 8: Busca Avançada (Busca e Filtros Refinados) — fonte da verdade dos filtros
   const [busca, setBusca] = useState('');
@@ -58,7 +60,6 @@ export function DocumentList() {
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [selectedFileUrl, setSelectedFileUrl] = useState<string | null>(null);
   const [selectedFileName, setSelectedFileName] = useState('');
-  const [selectedDocument, setSelectedDocument] = useState<DocumentListItem | null>(null);
 
   const [isRevModalOpen, setIsRevModalOpen] = useState(false);
   const [revDocId, setRevDocId] = useState<number | null>(null);
@@ -75,7 +76,7 @@ export function DocumentList() {
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const navigate = useNavigate();
-  const canUpload = role === 'GESTOR' || role === 'ENGENHEIRO';
+  const canUpload = canCreateDocument && canUploadRevision;
 
   // Carrega pacotes e disciplinas do contrato
   useEffect(() => {
@@ -133,8 +134,7 @@ export function DocumentList() {
     }
   };
 
-  const handleViewDocument = (doc: DocumentListItem, url: string, nome: string) => {
-    setSelectedDocument(doc);
+  const handleViewDocument = (url: string, nome: string) => {
     setSelectedFileUrl(url);
     setSelectedFileName(nome);
     setIsViewerOpen(true);
@@ -259,10 +259,10 @@ export function DocumentList() {
                 icon={Eye}
                 label="Visualizar Documento"
                 onClick={() => {
-                  const rev = row.original.revisions[row.original.revisions.length - 1];
-                  if (rev) {
-                    handleViewDocument(row.original, rev.filePath, `${row.original.codigoDocumento} - ${rev.versionLabel}`);
-                  }
+const rev = row.original.revisions[row.original.revisions.length - 1];
+                    if (rev) {
+                      handleViewDocument(rev.filePath, `${row.original.codigoDocumento} - ${rev.versionLabel}`);
+                    }
                 }}
               />
               <RowAction
@@ -484,12 +484,6 @@ export function DocumentList() {
         onClose={() => setIsViewerOpen(false)}
         fileUrl={selectedFileUrl}
         fileName={selectedFileName}
-        documentData={selectedDocument ? {
-          ocrStatus: selectedDocument.ocrStatus,
-          projectNumber: selectedDocument.projectNumber,
-          extractedRevision: selectedDocument.extractedRevision,
-          disciplina: selectedDocument.contractDiscipline?.nome ?? null,
-        } : null}
       />
 
       <RevisionUploadForm

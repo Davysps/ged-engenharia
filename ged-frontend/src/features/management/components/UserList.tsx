@@ -77,8 +77,9 @@ export const UserList: FC = () => {
                         <span
                           className={`inline-block px-2.5 py-1 text-xs font-bold rounded uppercase
                             ${u.role === 'GESTOR' ? 'bg-purple-100 text-purple-800' :
-                              u.role === 'APROVADOR' ? 'bg-green-100 text-green-800' :
+                              u.role === 'COORDENADOR' ? 'bg-emerald-100 text-emerald-800' :
                               u.role === 'ENGENHEIRO' ? 'bg-blue-100 text-blue-800' :
+                              u.role === 'PLANEJADOR' ? 'bg-amber-100 text-amber-800' :
                               'bg-gray-100 text-gray-600'}`}
                         >
                           {u.role}

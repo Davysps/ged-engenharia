@@ -17,9 +17,9 @@ import type {
  * `ContractMembership` do usuário autenticado. Clientes diferentes
  * nunca enxergam dados uns dos outros.
  *
- * RBAC:
+ * RBAC (Etapa 2.6):
  * - Listar: qualquer membro do contrato.
- * - Criar/editar/deletar: apenas usuários com role GESTOR.
+ * - Criar/editar/deletar: GESTOR, COORDENADOR e PLANEJADOR (domínio do Planejamento).
  */
 export class PlanningService {
 
@@ -43,12 +43,13 @@ export class PlanningService {
   }
 
   /**
-   * Garante RBAC de escrita: apenas GESTOR.
-   * @throws Error com código 'ACCESS_DENIED' caso a role não seja GESTOR.
+   * Garante RBAC de escrita do Planejamento.
+   * Permite: GESTOR, COORDENADOR e PLANEJADOR.
+   * @throws Error com código 'ACCESS_DENIED' caso a role não tenha acesso.
    */
-  private static requireManager(membershipRole: string) {
-    if (membershipRole !== 'GESTOR') {
-      const error = new Error('Permissão insuficiente: apenas gestores podem realizar esta ação.');
+  private static requirePlanningAccess(membershipRole: string) {
+    if (!['GESTOR', 'COORDENADOR', 'PLANEJADOR'].includes(membershipRole)) {
+      const error = new Error('Permissão insuficiente: apenas Gestores, Coordenadores ou Planejadores podem realizar esta ação.');
       (error as any).code = 'ACCESS_DENIED';
       throw error;
     }
@@ -97,7 +98,7 @@ export class PlanningService {
     data: CreateWorkPackageInput
   ) {
     const membership = await PlanningService.requireMembership(contractId, userId);
-    PlanningService.requireManager(membership.role);
+    PlanningService.requirePlanningAccess(membership.role);
 
     return await prisma.workPackage.create({
       data: {
@@ -113,7 +114,7 @@ export class PlanningService {
 
   /**
    * Atualiza um pacote de trabalho existente.
-   * Acesso: apenas GESTOR.
+   * Acesso: GESTOR, COORDENADOR e PLANEJADOR.
    */
   static async updateWorkPackage(
     contractId: number,
@@ -122,7 +123,7 @@ export class PlanningService {
     data: UpdateWorkPackageInput
   ) {
     const membership = await PlanningService.requireMembership(contractId, userId);
-    PlanningService.requireManager(membership.role);
+    PlanningService.requirePlanningAccess(membership.role);
 
     const existing = await prisma.workPackage.findFirst({
       where: { id: workPackageId, contractId },
@@ -157,7 +158,7 @@ export class PlanningService {
 
   /**
    * Remove um pacote de trabalho.
-   * Acesso: apenas GESTOR.
+   * Acesso: GESTOR, COORDENADOR e PLANEJADOR.
    */
   static async deleteWorkPackage(
     contractId: number,
@@ -165,7 +166,7 @@ export class PlanningService {
     workPackageId: number
   ) {
     const membership = await PlanningService.requireMembership(contractId, userId);
-    PlanningService.requireManager(membership.role);
+    PlanningService.requirePlanningAccess(membership.role);
 
     const existing = await prisma.workPackage.findFirst({
       where: { id: workPackageId, contractId },

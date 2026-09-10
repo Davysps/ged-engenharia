@@ -25,8 +25,8 @@ export class TransmittalController {
         where: { userId: userId, contractId: contractId }
       });
 
-      if (!membership || !['GESTOR', 'ENGENHEIRO'].includes(membership.role)) {
-        res.status(403).json({ error: 'Permissão negada. Apenas Gestores ou Engenheiros podem emitir Transmittals.' });
+      if (!membership || !['GESTOR', 'COORDENADOR', 'ENGENHEIRO'].includes(membership.role)) {
+        res.status(403).json({ error: 'Permissão negada. Apenas Gestores, Coordenadores ou Engenheiros podem emitir Transmittals.' });
         return;
       }
 

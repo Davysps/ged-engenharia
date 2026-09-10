@@ -188,9 +188,11 @@ export const handleApprovalAction = async (req: AuthRequest, res: Response): Pro
       where: { userId_contractId: { userId, contractId } }
     });
 
-    // ── GATEKEEPER POR ESTÁGIO (PATCH 10.2) ──────────────────────────────
+    // ── GATEKEEPER POR ESTÁGIO (PATCH 10.2 / Etapa 2.6) ──────────────────
     // Análise do Cliente: SOMENTE o ator externo (isClient: true) responde.
-    // Carimbos internos (Verificação/Coordenação): somente GESTOR/APROVADOR do Time.
+    // Carimbos internos:
+    //   VERIFICACAO → Time interno (ENGENHEIRO/GESTOR/COORDENADOR)
+    //   APROVACAO   → Coordenação (GESTOR/COORDENADOR apenas)
     const stage = workflow.stage;
 
     if (stage === ApprovalStage.CLIENTE) {
@@ -206,7 +208,11 @@ export const handleApprovalAction = async (req: AuthRequest, res: Response): Pro
         return;
       }
     } else {
-      if (!membership || !['GESTOR', 'APROVADOR'].includes(membership.role) || isClient) {
+      const internalRoles =
+        stage === ApprovalStage.APROVACAO
+          ? ['GESTOR', 'COORDENADOR']
+          : ['GESTOR', 'COORDENADOR', 'ENGENHEIRO'];
+      if (!membership || !internalRoles.includes(membership.role) || isClient) {
         res.status(403).json({
           error: 'Acesso negado: Perfil insuficiente para realizar esta aprovação interna.',
         });

@@ -10,8 +10,8 @@ import { TimesheetList } from './TimesheetList';
 import { useTimesheet } from '../hooks/useTimesheet';
 import { WorkflowFlowchart, getWorkflowStageIndex } from './WorkflowFlowchart';
 import { InternalCorrectionForm } from './InternalCorrectionForm';
-import { useAuth } from '../../../contexts/AuthContext';
-import type { ApprovalStatus } from '../../../types/prisma-types';
+import { usePermissions } from '../../../hooks/usePermissions';
+import type { ApprovalStatus, ApprovalStage } from '../../../types/prisma-types';
 import {
   ChevronLeft,
   FileText,
@@ -109,48 +109,6 @@ export function getRevisionFooterMode(revision: RevisionDetail): RevisionFooterM
 function getNextVersionLabel(currentLabel: string): string {
   const match = currentLabel.match(/R(\d+)/i);
   return match && match[1] ? `R${parseInt(match[1], 10) + 1}` : `${currentLabel}+`;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Sub-component: OCR Status Badge
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface OcrStatusBadgeProps {
-  status: string;
-}
-
-function OcrStatusBadge({ status }: OcrStatusBadgeProps) {
-  switch (status) {
-    case 'PENDING':
-    case 'PROCESSING':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-yellow-100 text-yellow-800 text-xs rounded-md font-medium">
-          <Clock className="w-3.5 h-3.5" />
-          {status === 'PENDING' ? 'Aguardando Extração' : 'Extraindo (RPA)...'}
-        </span>
-      );
-    case 'COMPLETED':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-800 text-xs rounded-md font-medium">
-          <CheckCircle className="w-3.5 h-3.5" />
-          Metadados Extraídos
-        </span>
-      );
-    case 'FAILED':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-100 text-red-800 text-xs rounded-md font-medium">
-          <AlertTriangle className="w-3.5 h-3.5" />
-          Falha no OCR
-        </span>
-      );
-    default:
-      return (
-        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-800 text-xs rounded-md font-medium">
-          <AlertCircle className="w-3.5 h-3.5" />
-          Status Desconhecido
-        </span>
-      );
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -537,15 +495,14 @@ interface RevisionCardProps {
   revision: RevisionDetail;
   isLatest: boolean;
   canUpload: boolean;
-  canApprove: boolean;
-  isClientUser: boolean;
+  canDecideAtStage: (stage?: ApprovalStage | null) => boolean;
   codigoDocumento: string;
   onPreview: (revision: RevisionDetail) => void;
   onUploadSuccess: () => void;
   onApproved: () => void;
 }
 
-function RevisionCard({ revision, isLatest, canUpload, canApprove, isClientUser, codigoDocumento, onPreview, onUploadSuccess, onApproved }: RevisionCardProps) {
+function RevisionCard({ revision, isLatest, canUpload, canDecideAtStage, codigoDocumento, onPreview, onUploadSuccess, onApproved }: RevisionCardProps) {
   const [isRevModalOpen, setIsRevModalOpen] = useState(false);
   // PATCH 10.3: Modal da Correção Interna (retrabalho sem gerar R+1)
   const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
@@ -559,13 +516,11 @@ function RevisionCard({ revision, isLatest, canUpload, canApprove, isClientUser,
   const workflows = revision.approvalWorkflows ?? [];
   const pendingApproval = workflows.find((w) => w.status === 'PENDENTE') ?? null;
 
-  // PATCH 10.2/10.3: RBAC por estágio — INTERFACE DO CLIENTE.
-  // A caixa "Decidir Revisão" no carimbo CLIENTE só aparece habilitada para
-  // usuários externos (isClient === true). O Time interno (GESTOR/APROVADOR)
-  // decide apenas os carimbos internos (Verificação/Coordenação).
-  const canActOnPending =
-    !!pendingApproval &&
-    (pendingApproval.stage === 'CLIENTE' ? isClientUser : canApprove && !isClientUser);
+  // Etapa 2.6 — RBAC por estágio da Máquina de Estados de Engenharia:
+  //   VERIFICACAO → ENGENHEIRO/GESTOR/COORDENADOR
+  //   APROVACAO   → GESTOR/COORDENADOR (Coordenação)
+  //   CLIENTE     → apenas o ator externo (isClient)
+  const canActOnPending = !!pendingApproval && canDecideAtStage(pendingApproval.stage);
 
   const resetAction = () => {
     setActionFor(null);
@@ -868,36 +823,6 @@ function MetadataCard({ document }: MetadataCardProps) {
         </span>
       </div>
 
-      {/* Status OCR */}
-      <div>
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-2">
-          Status da Extração (OCR/RPA)
-        </span>
-        <OcrStatusBadge status={document.ocrStatus} />
-      </div>
-
-      {/* Dados Extraídos via IA */}
-      {document.ocrStatus === 'COMPLETED' && (
-        <div className="space-y-3 pt-3 border-t border-gray-100">
-          <div>
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">
-              Número do Projeto (Extraído)
-            </span>
-            <p className="text-sm text-gray-800 font-medium">
-              {document.projectNumber || 'Não identificado'}
-            </p>
-          </div>
-          <div>
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">
-              Revisão Extraída (Planta)
-            </span>
-            <p className="text-sm text-gray-800 font-medium">
-              {document.extractedRevision || 'Não identificado'}
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Metadados Dinâmicos */}
       {document.metadata && Object.keys(document.metadata).length > 0 && (
         <div className="pt-3 border-t border-gray-100">
@@ -959,17 +884,16 @@ export function DocumentDetail() {
   const [selectedFileUrl, setSelectedFileUrl] = useState<string | null>(null);
   const [selectedFileName, setSelectedFileName] = useState('');
 
-  // ÉPICO 10: Modal do Fluxograma Visual
+// Épico 10: Modal do Fluxograma Visual
   const [isFlowOpen, setIsFlowOpen] = useState(false);
 
-  // PATCH 10.2: Ator autenticado (para a Análise do Cliente pós-emissão)
-  const { user } = useAuth();
-  const isClientUser = user?.isClient ?? false;
+  // Etapa 2.6: Permissões RBAC do usuário logado no contrato ativo.
+  const { canUploadRevision, canDecideAtStage } = usePermissions();
 
   const rawId = routeDocumentId ?? id;
   const documentId = Number(rawId);
-  const canUpload = document?.userRole === 'GESTOR' || document?.userRole === 'ENGENHEIRO';
-  const canApprove = document?.userRole === 'GESTOR' || document?.userRole === 'APROVADOR';
+  // Etapa 2.6: apenas GESTOR/COORDENADOR sobem revisões ou corrigem internamente.
+  const canUpload = canUploadRevision;
 
   // ÉPICO 9: Estado dos Apontamentos de Horas deste documento
   const timesheet = useTimesheet(documentId);
@@ -1132,8 +1056,7 @@ export function DocumentDetail() {
                 revision={revision}
                 isLatest={index === document.revisions.length - 1}
                 canUpload={canUpload}
-                canApprove={canApprove}
-                isClientUser={isClientUser}
+                canDecideAtStage={canDecideAtStage}
                 codigoDocumento={document.codigoDocumento}
                 onPreview={handlePreview}
                 onUploadSuccess={fetchDocument}
@@ -1195,12 +1118,6 @@ export function DocumentDetail() {
         onClose={() => setIsViewerOpen(false)}
         fileUrl={selectedFileUrl}
         fileName={selectedFileName}
-        documentData={document ? {
-          ocrStatus: document.ocrStatus,
-          projectNumber: document.projectNumber,
-          extractedRevision: document.extractedRevision,
-          disciplina: document.contractDiscipline?.nome ?? null,
-        } : null}
       />
     </div>
   );

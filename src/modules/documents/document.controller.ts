@@ -33,6 +33,20 @@ export const uploadDocument = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
+    // Etapa 2.6 — RBAC: apenas GESTOR/COORDENADOR criam novos documentos.
+    // O ENGENHEIRO não cria documento (apenas visualiza, aponta horas e decide
+    // tecnicamente); o PLANEJADOR foca em Planejamento e não cria acervo técnico.
+    const membership = await prisma.contractMembership.findUnique({
+      where: { userId_contractId: { userId, contractId } },
+      select: { role: true },
+    });
+    if (!membership || !['GESTOR', 'COORDENADOR'].includes(membership.role)) {
+      res.status(403).json({
+        error: 'Acesso negado: apenas Gestores ou Coordenadores podem criar novos documentos.',
+      });
+      return;
+    }
+
     // FASE 2 (Nível Enterprise): o arquivo já está no S3 (PUT direto via
     // pre-signed URL). O Backend apenas regista a fileKey como referência.
     const { filePath, fileHash } = resolveFileReferences(fileKey);
@@ -173,6 +187,18 @@ export const uploadRevision = async (req: AuthRequest, res: Response): Promise<v
 
     if (!document) {
       res.status(404).json({ error: 'Documento não encontrado.' });
+      return;
+    }
+
+    // Etapa 2.6 — RBAC: apenas GESTOR/COORDENADOR sobem novas revisões oficiais.
+    const membership = await prisma.contractMembership.findUnique({
+      where: { userId_contractId: { userId, contractId: document.contractId } },
+      select: { role: true },
+    });
+    if (!membership || !['GESTOR', 'COORDENADOR'].includes(membership.role)) {
+      res.status(403).json({
+        error: 'Acesso negado: apenas Gestores ou Coordenadores podem submeter novas revisões.',
+      });
       return;
     }
 
@@ -335,8 +361,9 @@ export const internalUpdateRevision = async (req: AuthRequest, res: Response): P
       return;
     }
 
-    // ── RBAC multi-tenant: apenas o Time interno (GESTOR/ENGENHEIRO) do
-    // contrato corrige; usuários Cliente (isClient) jamais reenviam internamente.
+    // ── RBAC multi-tenant (Etapa 2.6): apenas o Time interno
+    // (GESTOR/COORDENADOR/ENGENHEIRO) do contrato corrige; usuários Cliente
+    // (isClient) jamais reenviam internamente.
     const actor = await prisma.user.findUnique({
       where: { id: userId },
       select: { isClient: true },
@@ -349,7 +376,7 @@ export const internalUpdateRevision = async (req: AuthRequest, res: Response): P
     if (
       actor?.isClient ||
       !membership ||
-      !['GESTOR', 'ENGENHEIRO'].includes(membership.role)
+      !['GESTOR', 'COORDENADOR', 'ENGENHEIRO'].includes(membership.role)
     ) {
       res.status(403).json({
         error: 'Acesso negado: apenas o Time interno (Engenharia/Coordenação) pode enviar correções internas.',

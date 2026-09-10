@@ -2,6 +2,7 @@ import React from 'react';
 import { useParams, Outlet, Link, useLocation } from 'react-router-dom';
 import { ContractProvider, useContract } from '../../../contexts/ContractContext';
 import { useAuth } from '../../../contexts/AuthContext';
+import { usePermissions } from '../../../hooks/usePermissions';
 import {
   LayoutDashboard,
   FolderOpen,
@@ -21,6 +22,8 @@ const ContractLayoutInner: React.FC = () => {
   // não pode ver abas de processos internos (Planejamento/Gestão/Aprovações).
   const { user } = useAuth();
   const isClient = user?.isClient === true;
+  // Etapa 2.6: Permissões RBAC para o menu de navegação.
+  const { canViewApprovals, canManagePlanning, canManageUsers } = usePermissions();
   const location = useLocation();
 
   if (isLoading) {
@@ -67,8 +70,9 @@ const ContractLayoutInner: React.FC = () => {
       label: 'Aprovações Internas',
       icon: ClipboardCheck,
       active: location.pathname.includes('/approvals'),
-      // PATCH 10.4: Cliente é "cego" para o fluxo interno de aprovação
-      visible: !isClient && ['GESTOR', 'APROVADOR'].includes(role || ''),
+      // PATCH 10.4 + Etapa 2.6: Cliente é "cego" para o fluxo interno e o
+      // PLANEJADOR não aprova documento técnico (foco em Planejamento).
+      visible: canViewApprovals,
     },
     {
       to: `${basePath}/transmittals`,
@@ -82,16 +86,17 @@ const ContractLayoutInner: React.FC = () => {
       label: 'Planejamento',
       icon: CalendarRange,
       active: location.pathname.includes('/planning'),
-      // PATCH 10.4: Planejamento é processo interno — oculto do Cliente
-      visible: !isClient,
+      // PATCH 10.4: Planejamento é processo interno — oculto do Cliente.
+      // Etapa 2.6: todo o Time interno (incl. PLANEJADOR, dono do módulo) acessa.
+      visible: canManagePlanning,
     },
     {
       to: `${basePath}/management`,
       label: 'Gestão',
       icon: Settings2,
       active: location.pathname.includes('/management'),
-      // PATCH 10.4: Gestão é processo interno — oculto do Cliente
-      visible: !isClient && role === 'GESTOR',
+      // PATCH 10.4 + Etapa 2.6: Gestão é processo interno — apenas GESTOR.
+      visible: canManageUsers,
     },
   ];
 

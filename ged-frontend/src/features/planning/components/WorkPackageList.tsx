@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { FC } from 'react';
 import { useContract } from '../../../contexts/ContractContext';
+import { usePermissions } from '../../../hooks/usePermissions';
 import { usePlanning } from '../hooks/usePlanning';
 import { WorkPackageForm } from './WorkPackageForm';
 import { WORK_PACKAGE_STATUS_CONFIG } from '../types/planning.types';
@@ -11,12 +12,14 @@ const STATUS_OPTIONS = Object.keys(WORK_PACKAGE_STATUS_CONFIG) as WorkPackageSta
 /**
  * Tela de listagem (Tabela) dos Pacotes de Trabalho de um contrato.
  * Inclui Busca Avançada (nome) e Filtros Refinados (status).
- * Integração com RBAC: ações de escrita visíveis apenas para GESTOR.
+ * RBAC (Etapa 2.6): ações de escrita visíveis para GESTOR, COORDENADOR e PLANEJADOR.
  */
 export const WorkPackageList: FC = () => {
-  const { contract, role } = useContract();
+  const { contract } = useContract();
   const contractId = Number(contract?.id);
-  const isManager = role === 'GESTOR';
+  // Etapa 2.6: donos do módulo de Planejamento podem criar/editar/remover.
+  const { canManageWorkPackages } = usePermissions();
+  const isManager = canManageWorkPackages;
 
   const { workPackages, isLoading, error, fetchWorkPackages, deleteWorkPackage } =
     usePlanning(contractId);

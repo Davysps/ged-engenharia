@@ -16,9 +16,10 @@ enum GlobalRole {
 }
 
 enum ContractRole {
-  GESTOR // Pode criar/editar documentos e convidar pessoas
-  ENGENHEIRO // Pode submeter novas revisões (R0, R1)
-  APROVADOR // Pode aprovar/rejeitar revisões
+  GESTOR // Acesso total: cria, aprova e gerencia
+  COORDENADOR // Acesso total: cria, aprova e gerencia
+  ENGENHEIRO // Não cria documentos; decide tecnicamente (Verificação) e aponta horas
+  PLANEJADOR // Foco em Planejamento e Pacotes de Trabalho; não aprova documento técnico
   LEITOR // Só pode visualizar/baixar
 }
 

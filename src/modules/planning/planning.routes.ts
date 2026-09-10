@@ -16,9 +16,9 @@ router.use(verifyToken);
 // Todas as rotas recebem o contractId como query param para isolamento multi-tenant.
 
 // GET   /planning?contractId=X                — Lista pacotes (qualquer membro)
-// POST  /planning?contractId=X                — Cria pacote (GESTOR)
-// PATCH /planning/:workPackageId?contractId=X — Atualiza pacote (GESTOR)
-// DELETE /planning/:workPackageId?contractId=X — Remove pacote (GESTOR)
+// POST  /planning?contractId=X                — Cria pacote (GESTOR/COORDENADOR/PLANEJADOR)
+// PATCH /planning/:workPackageId?contractId=X — Atualiza pacote (GESTOR/COORDENADOR/PLANEJADOR)
+// DELETE /planning/:workPackageId?contractId=X — Remove pacote (GESTOR/COORDENADOR/PLANEJADOR)
 router.get('/', listWorkPackages);
 router.post('/', createWorkPackage);
 router.patch('/:workPackageId', updateWorkPackage);

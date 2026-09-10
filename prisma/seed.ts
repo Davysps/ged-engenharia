@@ -3,11 +3,20 @@ import { prisma } from '../src/prisma';
 async function main() {
   console.log('Iniciando o seed da base de dados Multi-Tenant...');
 
-  // 1. Limpar banco para evitar duplicidades em testes
+  // 1. Limpar banco para evitar duplicidades em testes (ordem das FKs)
+  await prisma.auditLog.deleteMany();
+  await prisma.documentLink.deleteMany();
+  await prisma.timeLog.deleteMany();
+  await prisma.approvalWorkflow.deleteMany();
+  await prisma.transmittalItem.deleteMany();
+  await prisma.transmittal.deleteMany();
   await prisma.revision.deleteMany();
   await prisma.document.deleteMany();
+  await prisma.workPackage.deleteMany();
+  await prisma.contractDiscipline.deleteMany();
   await prisma.contractMembership.deleteMany();
   await prisma.contract.deleteMany();
+  await prisma.project.deleteMany();
   await prisma.client.deleteMany();
   await prisma.user.deleteMany();
 
@@ -25,8 +34,12 @@ async function main() {
     }
   });
 
-  // 3. Criar Usuários (O Gestor e o Engenheiro)
+  // 3. Criar Usuários (Etapa 2.6: RBAC real de engenharia)
   const gestor = await prisma.user.create({
+    data: { nome: 'Carla Gestora', email: 'carla@ged.com', senhaHash: 'hash', globalRole: 'USER' }
+  });
+
+  const coordenador = await prisma.user.create({
     data: { nome: 'Carlos Coordenador', email: 'carlos@ged.com', senhaHash: 'hash', globalRole: 'USER' }
   });
 
@@ -34,16 +47,22 @@ async function main() {
     data: { nome: 'Davy Silva', email: 'davy@ged.com', senhaHash: 'hash', globalRole: 'USER' }
   });
 
+  const planejador = await prisma.user.create({
+    data: { nome: 'Paula Planejadora', email: 'paula@ged.com', senhaHash: 'hash', globalRole: 'USER' }
+  });
+
   // ÉPICO 10: Usuário externo (Cliente) — isClient: true para identificar ator na timeline
   const cliente = await prisma.user.create({
     data: { nome: 'Ana Cliente', email: 'ana@vale.com', senhaHash: 'hash', globalRole: 'USER', isClient: true }
   });
 
-  // 4. Distribuir as Permissões no Contrato (RBAC)
+  // 4. Distribuir as Permissões no Contrato (RBAC — Etapa 2.6)
   await prisma.contractMembership.createMany({
     data: [
       { userId: gestor.id, contractId: contract.id, role: 'GESTOR' },
+      { userId: coordenador.id, contractId: contract.id, role: 'COORDENADOR' },
       { userId: engenheiro.id, contractId: contract.id, role: 'ENGENHEIRO' },
+      { userId: planejador.id, contractId: contract.id, role: 'PLANEJADOR' },
       { userId: cliente.id, contractId: contract.id, role: 'LEITOR' },
     ]
   });

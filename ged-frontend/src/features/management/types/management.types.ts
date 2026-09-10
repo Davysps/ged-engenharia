@@ -9,7 +9,7 @@
  * Role de um usuário dentro de um contrato (RBAC).
  * Espelha o enum ContractRole do Prisma.
  */
-export type ContractRole = 'GESTOR' | 'ENGENHEIRO' | 'APROVADOR' | 'LEITOR';
+export type ContractRole = 'GESTOR' | 'COORDENADOR' | 'ENGENHEIRO' | 'PLANEJADOR' | 'LEITOR';
 
 /**
  * Representa uma Disciplina de Contrato (ContractDiscipline no backend).

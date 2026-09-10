@@ -72,8 +72,8 @@ export type DisciplineIdParamInput = z.infer<typeof disciplineIdParamSchema>;
 export const inviteUserSchema = z.object({
   nome: z.string().min(1, 'O nome do usuário é obrigatório.').max(255, 'O nome do usuário deve ter no máximo 255 caracteres.'),
   email: z.string().email('O email fornecido não é válido.'),
-  role: z.enum(['GESTOR', 'ENGENHEIRO', 'APROVADOR', 'LEITOR'], {
-    error: 'A role fornecida não é válida. Valores aceitos: GESTOR, ENGENHEIRO, APROVADOR, LEITOR.',
+  role: z.enum(['GESTOR', 'COORDENADOR', 'ENGENHEIRO', 'PLANEJADOR', 'LEITOR'], {
+    error: 'A role fornecida não é válida. Valores aceitos: GESTOR, COORDENADOR, ENGENHEIRO, PLANEJADOR, LEITOR.',
   }),
 });
 

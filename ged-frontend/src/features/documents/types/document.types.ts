@@ -5,7 +5,7 @@
  * verbatimModuleSyntax (exigido pelo tsconfig.app.json do frontend).
  */
 
-import type { RevisionStatus, ApprovalStatus, ApprovalStage, DocumentOcrStatus, TransmittalStatus, ContractRole } from '../../../types/prisma-types';
+import type { RevisionStatus, ApprovalStatus, ApprovalStage, TransmittalStatus, ContractRole } from '../../../types/prisma-types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos Auxiliares
@@ -107,10 +107,6 @@ export interface DocumentDetail {
   contractDiscipline: ContractDisciplineRef | null;
   workPackage: WorkPackageRef | null;
   metadata: Record<string, unknown> | null;
-  ocrStatus: DocumentOcrStatus;
-  projectNumber: string | null;
-  extractedRevision: string | null;
-  extractedMetadata: Record<string, unknown> | null;
   createdAt: string;
   contract: ContractInfo;
   createdBy: UserInfo;
@@ -174,9 +170,6 @@ export interface DocumentListItem {
   id: number;
   codigoDocumento: string;
   titulo: string;
-  ocrStatus: DocumentOcrStatus;
-  projectNumber: string | null;
-  extractedRevision: string | null;
   contractDiscipline: ContractDisciplineRef | null;
   workPackage: WorkPackageRef | null;
   revisions: DocumentListItemRevision[];
