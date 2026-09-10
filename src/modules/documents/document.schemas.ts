@@ -62,7 +62,17 @@ export const uploadDocumentSchema = z.object({
   // FASE 2 (Nível Enterprise): S3 Pre-signed URLs.
   // O arquivo já está no bucket quando o Backend é notificado; a fileKey
   // (retornada por POST /documents/presigned-url) é a única referência física.
-  fileKey: z.string().min(1, 'A fileKey do arquivo enviado ao S3 é obrigatória.'),
+  //
+  // DOCUMENTOS "CASCA" (Shell): o arquivo físico é OPCIONAL no cadastro.
+  // Sem fileKey, o Backend cria apenas os metadados do Documento (placeholder
+  // no MDR) e PULA o fluxo S3 + criação da revisão R0 — o físico chega depois,
+  // numa subida de revisão (uploadRevision).
+  fileKey: z
+    .string()
+    .trim()
+    .min(1, 'A fileKey do arquivo enviado ao S3 é obrigatória.')
+    .optional()
+    .or(z.literal('')),
 });
 
 export type UploadDocumentInput = z.infer<typeof uploadDocumentSchema>;

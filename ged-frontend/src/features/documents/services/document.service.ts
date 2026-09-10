@@ -82,8 +82,13 @@ export const documentService = {
   /**
    * Passo 3 — Registra o novo documento (R0) na base enviando a fileKey.
    * O arquivo já está no bucket; aqui só os metadados trafegam (JSON).
+   *
+   * DOCUMENTOS "CASCA": a fileKey é OPCIONAL. Sem fileKey, o backend cria
+   * apenas os metadados do documento (placeholder no MDR) e pula o S3/R0.
    */
-  async createDocument(payload: CreateDocumentInput & { fileKey: string }): Promise<CreateDocumentResponse> {
+  async createDocument(
+    payload: CreateDocumentInput & { fileKey?: string }
+  ): Promise<CreateDocumentResponse> {
     const response = await api.post<CreateDocumentResponse>('/documents/upload', payload);
     return response.data;
   },
@@ -100,13 +105,21 @@ export const documentService = {
    * Orquestra o fluxo completo de envio de um novo documento (R0):
    * pre-signed URL → PUT no S3 → registro no backend.
    *
+   * SEM arquivo (documento "casca"): pula o presign e o PUT no S3 e registra
+   * apenas os metadados no backend (o físico chega depois, numa subida de
+   * revisão).
+   *
    * @param onPhase - Callback opcional para informar a etapa corrente na UI.
    */
   async submitDocument(
-    file: File,
+    file: File | null | undefined,
     payload: CreateDocumentInput,
     onPhase?: (phase: UploadPhase) => void
   ): Promise<CreateDocumentResponse> {
+    if (!file) {
+      return this.createDocument(payload);
+    }
+
     onPhase?.('presign');
     const { uploadUrl, fileKey } = await this.getPresignedUrl(file.name, getFileType(file));
 

@@ -25,6 +25,10 @@ const PHASE_LABELS: Record<UploadPhase, string> = {
 // ─── Schema de validação (cliente) ────────────────────────────────────────
 // Espelha as regras do backend (document.schemas.ts) para prevenir erros
 // antes de qualquer requisição: código, título e arquivo físico.
+//
+// DOCUMENTO "CASCA" (Shell): o arquivo é OPCIONAL. O Planejador pode cadastrar
+// o esqueleto do documento no MDR antes do PDF existir — o físico será anexado
+// depois, numa subida de revisão (R0).
 const uploadSchema = z.object({
   codigoDocumento: z
     .string()
@@ -39,7 +43,10 @@ const uploadSchema = z.object({
   // Vínculos opcionais (string vazia = sem vínculo), convertidos no submit.
   workPackageId: z.string(),
   contractDisciplineId: z.string(),
-  file: z.instanceof(File, { message: 'Selecione um arquivo técnico para upload.' }),
+  file: z
+    .instanceof(File, { message: 'Selecione um arquivo técnico para upload.' })
+    .nullable()
+    .optional(),
 });
 
 type UploadFormValues = z.infer<typeof uploadSchema>;
@@ -69,6 +76,7 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<UploadFormValues>({
     resolver: zodResolver(uploadSchema),
@@ -77,11 +85,15 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
       titulo: '',
       workPackageId: '',
       contractDisciplineId: '',
+      file: null,
     },
     mode: 'onTouched',
   });
 
   const file = watch('file');
+  // FIX (NaN MB): `react-hook-form` entrega o valor do input `type="file"` como
+  // FileList. Verificamos se o valor é um `File` real antes de ler `.name/.size`.
+  const selectedFile = file instanceof File ? file : null;
 
   if (!isOpen || !contract) return null;
 
@@ -93,14 +105,18 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
   };
 
   const onSubmit = async (data: UploadFormValues) => {
+    const selectedFile = data.file instanceof File ? data.file : null;
+
     setStatus('loading');
-    setPhase('presign');
+    // Sem arquivo físico = documento "casca" (só metadados): não há etapas
+    // de pre-signed URL nem PUT no S3 — o backend apenas regista o documento.
+    setPhase(selectedFile ? 'presign' : 'register');
 
     try {
       // FASE 2: pre-signed URL → PUT direto no S3 → registro via fileKey (JSON).
       // Se o PUT na AWS falhar, o erro propaga e o backend NUNCA é chamado.
       const response = await documentService.submitDocument(
-        data.file,
+        selectedFile,
         {
           contractId: Number(contract.id),
           codigoDocumento: data.codigoDocumento,
@@ -111,7 +127,12 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
         setPhase
       );
 
-      setMessage(`Sucesso! Arquivo salvo na AWS S3: ${response.revisions[0].filePath}`);
+      const firstRevision = response.revisions[0];
+      if (firstRevision) {
+        setMessage(`Sucesso! Arquivo salvo na AWS S3: ${firstRevision.filePath}`);
+      } else {
+        setMessage('Sucesso! Esqueleto do documento registrado. O arquivo físico será anexado em uma nova revisão.');
+      }
       setStatus('success');
 
       // Espera 2 segundos, limpa e fecha o modal
@@ -209,28 +230,55 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Arquivo Técnico Físico</label>
-            <label className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition ${
-              errors.file ? 'border-red-400' : 'border-gray-300'
-            }`}>
-              <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                {file ? (
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Arquivo Técnico Físico <span className="text-xs font-normal text-gray-400">(opcional — para criar o esqueleto do documento)</span>
+            </label>
+            <label className={`relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition ${
+              selectedFile ? 'bg-blue-50 hover:bg-blue-100 border-blue-300' : 'bg-gray-50 hover:bg-gray-100 border-gray-300'
+            } ${errors.file ? 'border-red-400' : ''}`}>
+              {selectedFile && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setValue('file', null, { shouldValidate: true });
+                  }}
+                  className="absolute top-2 right-2 p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                  title="Remover arquivo"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+              <div className="flex flex-col items-center justify-center pt-5 pb-6 px-4">
+                {selectedFile ? (
                   <>
                     <FileType className="w-8 h-8 text-blue-500 mb-2" />
-                    <p className="text-sm font-semibold text-gray-800">{file.name}</p>
-                    <p className="text-xs text-gray-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <p className="text-sm font-semibold text-gray-800 break-all text-center line-clamp-1">{selectedFile.name}</p>
+                    <p className="text-xs text-gray-500">
+                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
                   </>
                 ) : (
                   <>
                     <UploadCloud className="w-8 h-8 text-gray-400 mb-2" />
-                    <p className="text-sm text-gray-500"><span className="font-semibold">Clique para fazer upload</span> ou arraste</p>
+                    <p className="text-sm text-gray-500"><span className="font-semibold">Clique para anexar o PDF/DWG</span></p>
+                    <p className="text-xs text-gray-400 mt-1">Ou deixe em branco para cadastrar apenas os metadados (documento esqueleto).</p>
                   </>
                 )}
               </div>
               <input
                 type="file"
                 className="hidden"
-                {...register('file')}
+                onChange={(e) => {
+                  // FIX (NaN MB): extrai o arquivo REAL do FileList em vez de
+                  // repassar o valor bruto do input (`FileList`) para o estado
+                  // do react-hook-form.
+                  const file = e.target.files?.[0] ?? null;
+                  setValue('file', file, { shouldValidate: true });
+                  // Permite re-selecionar o mesmo arquivo depois de remover.
+                  e.target.value = '';
+                }}
               />
             </label>
             {errors.file && (
@@ -270,7 +318,7 @@ export function UploadForm({ isOpen, onClose, onSuccess }: UploadFormProps) {
               type="submit" disabled={isSubmitting}
               className="flex justify-center items-center py-2 px-6 rounded-lg font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-70 transition-all"
             >
-              {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Arquivar no S3'}
+              {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : selectedFile ? 'Arquivar no S3' : 'Criar Esqueleto (Sem Arquivo)'}
             </button>
           </div>
         </form>

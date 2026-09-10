@@ -28,11 +28,6 @@ export const uploadDocument = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    if (!fileKey) {
-      res.status(400).json({ error: 'Nenhum ficheiro técnico foi submetido.' });
-      return;
-    }
-
     // Etapa 2.6 — RBAC: apenas GESTOR/COORDENADOR criam novos documentos.
     // O ENGENHEIRO não cria documento (apenas visualiza, aponta horas e decide
     // tecnicamente); o PLANEJADOR foca em Planejamento e não cria acervo técnico.
@@ -47,6 +42,46 @@ export const uploadDocument = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
+    // ── DOCUMENTO "CASCA" (SEM ARQUIVO FÍSICO) ─────────────────────────
+    // REGRA DE NEGÓCIO (CRÍTICA): na engenharia real, o Planejador cadastra o
+    // Esqueleto/Placeholder do documento no sistema (MDR) ANTES do PDF existir.
+    // Sem fileKey → criamos apenas os metadados do Documento e PULAMOS o fluxo
+    // S3 + criação da revisão R0. O físico chega depois, na subida da revisão
+    // (uploadRevision, que cria R0 quando não há revisão inicial).
+    if (!fileKey) {
+      const shellDocument = await prisma.document.create({
+        data: {
+          contractId,
+          codigoDocumento,
+          titulo,
+          workPackageId,
+          contractDisciplineId,
+          createdById: userId,
+        },
+      });
+
+      // ÉPICO 12: Trilha de Auditoria — Cadastro de Esqueleto (sem físico)
+      AuditService.log({
+        userId,
+        contractId,
+        action: 'CREATE_DOCUMENT_SHELL',
+        entity: 'Document',
+        entityId: shellDocument.id,
+        details: {
+          codigoDocumento,
+          titulo,
+          hasFile: false,
+        },
+        ipAddress: req.ip ?? null,
+      });
+
+      // Mantém o shape de resposta compatível com o fluxo com arquivo:
+      // revisions sempre presente (array vazio) para o frontend não quebrar.
+      res.status(201).json({ ...shellDocument, revisions: [] });
+      return;
+    }
+
+    // ── DOCUMENTO COM ARQUIVO FÍSICO (fluxo normal) ────────────────────
     // FASE 2 (Nível Enterprise): o arquivo já está no S3 (PUT direto via
     // pre-signed URL). O Backend apenas regista a fileKey como referência.
     const { filePath, fileHash } = resolveFileReferences(fileKey);

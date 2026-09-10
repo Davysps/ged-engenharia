@@ -21,10 +21,14 @@ const PHASE_LABELS: Record<UploadPhase, string> = {
 };
 
 // ─── Schema de validação (cliente) ────────────────────────────────────────
+// z.custom<File | null> permite que o estado do form receba `null` (setValue
+// no onChange do input), mas a validação só passa com um `File` real — ou
+// seja, a subida de revisão exige arquivo físico obrigatoriamente.
 const revisionSchema = z.object({
-  file: z.instanceof(File, {
-    message: 'Selecione a nova versão do arquivo técnico para upload.',
-  }),
+  file: z.custom<File | null>(
+    (value) => value instanceof File,
+    'Selecione a nova versão do arquivo técnico para upload.'
+  ),
 });
 
 type RevisionFormValues = z.infer<typeof revisionSchema>;
@@ -35,10 +39,10 @@ export function RevisionUploadForm({ isOpen, onClose, documentId, codigoDocument
   const [message, setMessage] = useState('');
 
   const {
-    register,
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<RevisionFormValues>({
     resolver: zodResolver(revisionSchema),
@@ -46,6 +50,9 @@ export function RevisionUploadForm({ isOpen, onClose, documentId, codigoDocument
   });
 
   const file = watch('file');
+  // FIX (NaN MB): `react-hook-form` entrega o valor do input `type="file"` como
+  // FileList. Verificamos se o valor é um `File` real antes de ler `.name/.size`.
+  const selectedFile = file instanceof File ? file : null;
 
   if (!isOpen || !documentId) return null;
 
@@ -57,6 +64,13 @@ export function RevisionUploadForm({ isOpen, onClose, documentId, codigoDocument
   };
 
   const onSubmit = async ({ file }: RevisionFormValues) => {
+    // Guard duplo: a validação Zod já exige File, mas reforça para o TS/edge.
+    if (!(file instanceof File)) {
+      setMessage('Selecione um arquivo técnico para upload.');
+      setStatus('error');
+      return;
+    }
+
     setStatus('loading');
     setPhase('presign');
 
@@ -99,14 +113,15 @@ export function RevisionUploadForm({ isOpen, onClose, documentId, codigoDocument
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
           <div>
-            <label className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition ${
+            <label className={`relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition ${
               errors.file ? 'border-red-400' : 'border-gray-300'
-            }`}>
-              <div className="flex flex-col items-center justify-center pt-5 pb-6 text-center">
-                {file ? (
+            } ${selectedFile ? 'bg-indigo-50 hover:bg-indigo-100 border-indigo-300' : 'bg-gray-50 hover:bg-gray-100'}`}>
+              <div className="flex flex-col items-center justify-center pt-5 pb-6 text-center px-4">
+                {selectedFile ? (
                   <>
                     <FileType className="w-8 h-8 text-indigo-500 mb-2" />
-                    <p className="text-sm font-semibold text-gray-800">{file.name}</p>
+                    <p className="text-sm font-semibold text-gray-800 break-all text-center line-clamp-1">{selectedFile.name}</p>
+                    <p className="text-xs text-gray-500">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
                   </>
                 ) : (
                   <>
@@ -118,7 +133,12 @@ export function RevisionUploadForm({ isOpen, onClose, documentId, codigoDocument
               <input
                 type="file"
                 className="hidden"
-                {...register('file')}
+                onChange={(e) => {
+                  // FIX (NaN MB): extrai o arquivo REAL do FileList em vez de
+                  // repassar o valor bruto do input para o estado do RHF.
+                  const file = e.target.files?.[0] ?? null;
+                  setValue('file', file, { shouldValidate: true });
+                }}
               />
             </label>
             {errors.file && (

@@ -31,6 +31,9 @@ export function usePermissions() {
   const canApproveDocument =
     role === 'GESTOR' || role === 'COORDENADOR' || role === 'ENGENHEIRO';
 
+  // ── GRD / Transmittals ──────────────────────────────────────────────────
+  const canEmitTransmittal = role === 'GESTOR' || role === 'COORDENADOR';
+
   // ── Planejamento e Gestão ────────────────────────────────────────────────
   const canManagePlanning =
     role === 'GESTOR' || role === 'COORDENADOR' || role === 'PLANEJADOR';
@@ -60,6 +63,7 @@ export function usePermissions() {
     canCreateDocument,
     canUploadRevision,
     canApproveDocument,
+    canEmitTransmittal,
     canManagePlanning,
     canManageUsers,
     canManageWorkPackages,

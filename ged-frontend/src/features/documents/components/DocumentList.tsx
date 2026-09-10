@@ -13,8 +13,9 @@ import { usePermissions } from '../../../hooks/usePermissions';
 import { usePlanning } from '../../planning/hooks/usePlanning';
 import { useDisciplines } from '../../management/hooks/useDisciplines';
 import { useDocumentsQuery } from '../hooks/useDocumentsQuery';
+import { EmitirGrdModal } from '../../transmittals/components/EmitirGrdModal';
 import {
-  FileText, UploadCloud, Eye, History,
+  FileText, UploadCloud, Eye, History, Send,
   Search, FilterX, Package, Download, MoreHorizontal, FilePenLine,
 } from 'lucide-react';
 import { UploadForm } from './UploadForm';
@@ -33,7 +34,7 @@ const columnHelper = createColumnHelper<DocumentListItem>();
 export function DocumentList() {
   const { contract } = useContract();
   const contractId = Number(contract?.id ?? 0);
-  const { canCreateDocument, canUploadRevision } = usePermissions();
+  const { canCreateDocument, canUploadRevision, canEmitTransmittal } = usePermissions();
 
   // ÉPICO 8: Busca Avançada (Busca e Filtros Refinados) — fonte da verdade dos filtros
   const [busca, setBusca] = useState('');
@@ -43,6 +44,11 @@ export function DocumentList() {
 
   // Seleção múltipla de linhas (bulk actions)
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  // ETAPA 2.6.5: emissão de GRD a partir do Acervo Técnico
+  const [isEmitirGrdOpen, setIsEmitirGrdOpen] = useState(false);
+  // Sessão da GRD: incrementa a cada abertura para remontar o modal limpo
+  const [grdSessionKey, setGrdSessionKey] = useState(0);
 
   // Hooks auxiliares do contrato (multi-tenant)
   const { workPackages, fetchWorkPackages } = usePlanning(contractId);
@@ -234,7 +240,12 @@ export function DocumentList() {
           <span className="inline-block px-1.5 py-0.5 bg-blue-50 text-blue-800 text-[11px] rounded font-bold whitespace-nowrap">
             {currentRev.versionLabel}
           </span>
-        ) : null;
+        ) : (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-slate-100 text-slate-500 text-[11px] rounded font-medium whitespace-nowrap">
+            <FileText className="w-3 h-3" />
+            Sem arquivo
+          </span>
+        );
       },
     }),
     columnHelper.display({
@@ -411,16 +422,31 @@ const rev = row.original.revisions[row.original.revisions.length - 1];
 
         {/* Barra de Ações em Lote (bulk actions) */}
         {selectedRows.length > 0 && (
-          <div className="px-4 py-2 bg-blue-50/70 border-b border-blue-100 flex items-center justify-between gap-3">
+          <div className="px-4 py-2 bg-blue-50/70 border-b border-blue-100 flex items-center justify-between gap-3 flex-wrap">
             <span className="text-xs font-medium text-blue-800">
               {selectedRows.length} documento{selectedRows.length !== 1 ? 's' : ''} selecionado{selectedRows.length !== 1 ? 's' : ''}
             </span>
-            <button
-              onClick={() => table.resetRowSelection()}
-              className="text-[11px] font-medium text-blue-700 hover:text-blue-900 hover:underline"
-            >
-              Limpar seleção
-            </button>
+            <div className="flex items-center gap-2">
+              {canEmitTransmittal && (
+                <button
+                  onClick={() => {
+                    setGrdSessionKey((prev) => prev + 1);
+                    setIsEmitirGrdOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 bg-blue-800 hover:bg-blue-900 text-white px-3 py-1.5 text-sm font-bold rounded-lg shadow-sm transition-colors"
+                  title="Gerar uma Guia de Remessa de Documentos com o lote selecionado"
+                >
+                  <Send className="w-4 h-4" />
+                  Emitir GRD
+                </button>
+              )}
+              <button
+                onClick={() => table.resetRowSelection()}
+                className="text-[11px] font-medium text-blue-700 hover:text-blue-900 hover:underline"
+              >
+                Limpar seleção
+              </button>
+            </div>
           </div>
         )}
 
@@ -500,6 +526,18 @@ const rev = row.original.revisions[row.original.revisions.length - 1];
         codigoDocumento={historyDoc?.codigoDocumento ?? ''}
         titulo={historyDoc?.titulo ?? ''}
         revisions={historyDoc?.revisions ?? []}
+      />
+
+      <EmitirGrdModal
+        isOpen={isEmitirGrdOpen}
+        onClose={() => setIsEmitirGrdOpen(false)}
+        contractId={contractId}
+        documents={selectedRows.map((row) => row.original)}
+        sessionKey={grdSessionKey}
+        onSuccess={() => {
+          table.resetRowSelection();
+          refetch();
+        }}
       />
     </>
   );
