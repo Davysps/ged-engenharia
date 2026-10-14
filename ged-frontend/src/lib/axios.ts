@@ -1,8 +1,8 @@
 import axios from 'axios';
 
 export const api = axios.create({
-  // RESTAURADO: Voltámos à sua porta nativa. O prefixo '/api' foi erradicado.
-  baseURL: 'http://localhost:3000', 
+  // Configure VITE_API_URL por ambiente para desenvolvimento, staging e produção.
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
 });
 
 // INTERCEPTOR DE REQUISIÇÃO: Injeta o Token limpo (sem aspas fantasmas)

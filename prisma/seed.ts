@@ -1,6 +1,13 @@
 import { prisma } from '../src/prisma';
+import bcrypt from 'bcrypt';
 
 async function main() {
+  const seedPassword = process.env.SEED_DEFAULT_PASSWORD;
+  if (!seedPassword || seedPassword.length < 12) {
+    throw new Error('Defina SEED_DEFAULT_PASSWORD com pelo menos 12 caracteres antes de executar o seed.');
+  }
+  const seedPasswordHash = await bcrypt.hash(seedPassword, 12);
+
   console.log('Iniciando o seed da base de dados Multi-Tenant...');
 
   // 1. Limpar banco para evitar duplicidades em testes (ordem das FKs)
@@ -36,24 +43,24 @@ async function main() {
 
   // 3. Criar Usuários (Etapa 2.6: RBAC real de engenharia)
   const gestor = await prisma.user.create({
-    data: { nome: 'Carla Gestora', email: 'carla@ged.com', senhaHash: 'hash', globalRole: 'USER' }
+    data: { nome: 'Carla Gestora', email: 'carla@ged.com', senhaHash: seedPasswordHash, globalRole: 'USER' }
   });
 
   const coordenador = await prisma.user.create({
-    data: { nome: 'Carlos Coordenador', email: 'carlos@ged.com', senhaHash: 'hash', globalRole: 'USER' }
+    data: { nome: 'Carlos Coordenador', email: 'carlos@ged.com', senhaHash: seedPasswordHash, globalRole: 'USER' }
   });
 
   const engenheiro = await prisma.user.create({
-    data: { nome: 'Davy Silva', email: 'davy@ged.com', senhaHash: 'hash', globalRole: 'USER' }
+    data: { nome: 'Davy Silva', email: 'davy@ged.com', senhaHash: seedPasswordHash, globalRole: 'USER' }
   });
 
   const planejador = await prisma.user.create({
-    data: { nome: 'Paula Planejadora', email: 'paula@ged.com', senhaHash: 'hash', globalRole: 'USER' }
+    data: { nome: 'Paula Planejadora', email: 'paula@ged.com', senhaHash: seedPasswordHash, globalRole: 'USER' }
   });
 
   // ÉPICO 10: Usuário externo (Cliente) — isClient: true para identificar ator na timeline
   const cliente = await prisma.user.create({
-    data: { nome: 'Ana Cliente', email: 'ana@vale.com', senhaHash: 'hash', globalRole: 'USER', isClient: true }
+    data: { nome: 'Ana Cliente', email: 'ana@vale.com', senhaHash: seedPasswordHash, globalRole: 'USER', isClient: true }
   });
 
   // 4. Distribuir as Permissões no Contrato (RBAC — Etapa 2.6)

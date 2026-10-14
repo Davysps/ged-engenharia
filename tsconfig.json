@@ -41,5 +41,7 @@
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
-  }
+  },
+  "include": ["src/**/*.ts", "prisma/**/*.ts", "prisma.config.ts", "scripts/**/*.ts"],
+  "exclude": ["node_modules", "ged-frontend", "ged-worker-python"]
 }

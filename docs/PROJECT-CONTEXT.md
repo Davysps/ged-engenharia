@@ -150,7 +150,11 @@ O plano para evoluir do piloto até venda recorrente está em [`roadmap/saas-rea
 
 Correção aplicada nesta rodada: login valida e-mail/senha e aceita apenas hashes bcrypt; o fallback que comparava senha diretamente com `senhaHash` foi removido. As outras pendências de segurança e isolamento listadas na auditoria seguem abertas; esta correção isolada não torna o sistema pronto para piloto ou produção.
 
-Nota de estado: a auditoria de 2026-09-24 registra exposição de `.env` no histórico. O arquivo está ignorado pelo `.gitignore` no estado observado em 2026-10-13 e não aparece entre os arquivos atualmente indexados. Isso não comprova que credenciais históricas foram revogadas; a rotação permanece necessária.
+Compatibilidade de credenciais: o seed antigo armazenava senhas como texto, o que explica o `401` após a exigência de bcrypt. Cinco contas legadas foram convertidas para bcrypt preservando suas senhas; uma nova prévia encontrou zero contas pendentes. O comando `migrate:legacy-passwords` opera em prévia por padrão e só grava após opt-in; o seed passou a exigir `SEED_DEFAULT_PASSWORD` e gravar bcrypt.
+
+Também aplicado: CORS por allowlist (`CORS_ORIGINS`, localhost em desenvolvimento) e `VITE_API_URL` configurável no frontend. `.env.example` e `ged-frontend/.env.example` contêm apenas placeholders/valores locais.
+
+Nota de estado: a auditoria de 2026-09-24 registra exposição de `.env`. Em 2026-10-13, `.env` está ignorado e não foi encontrado nas refs/objetos Git alcançáveis deste checkout. Isso não verifica forks, clones antigos ou validade/revogação das credenciais; revisar os provedores continua necessário. A fronteira SaaS foi registrada em [ADR-009](architecture/ADR-009-organizacao-assinante.md): `Organization` assinante contém clientes externos, projetos e contratos; a migração requer mapa de propriedade revisado.
 
 | Fase | Nome | Foco | Entregável |
 |------|------|------|------------|

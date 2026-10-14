@@ -16,7 +16,29 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors()); 
+const developmentOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+const configuredOrigins = process.env.CORS_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean);
+const allowedOrigins = new Set(configuredOrigins ?? (
+  process.env.NODE_ENV === 'production' ? [] : developmentOrigins
+));
+
+for (const origin of allowedOrigins) {
+  let parsedOrigin: URL;
+  try {
+    parsedOrigin = new URL(origin);
+  } catch {
+    throw new Error(`CORS_ORIGINS contém uma origem inválida: ${origin}`);
+  }
+  if (!['http:', 'https:'].includes(parsedOrigin.protocol) || parsedOrigin.origin !== origin) {
+    throw new Error(`CORS_ORIGINS deve conter origens HTTP(S) sem caminhos: ${origin}`);
+  }
+}
+
+app.use(cors({
+  origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)),
+  optionsSuccessStatus: 204,
+  maxAge: 600,
+}));
 app.use(express.json());
 
 app.get('/health', (req, res) => {

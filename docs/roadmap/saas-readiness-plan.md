@@ -26,8 +26,9 @@ Uma pessoa pode participar de mais de uma organização ou contrato. Acesso exte
 
 - Backend Express/TypeScript, Prisma/PostgreSQL, React/Vite e worker Python estão no mesmo repositório; os módulos já cobrem documentos, revisões, aprovação, GRD, planejamento e auditoria.
 - `Contract` é a unidade de isolamento, mas `contractId` é lido de query/params/body; ausência de tenant faz a extensão Prisma deixar a consulta seguir sem filtro. A extensão não protege automaticamente relações incluídas nem modelos filhos.
-- Login ainda aceitava comparar a senha recebida diretamente com `senhaHash`; o seed também grava o literal `hash`, portanto os usuários de seed não são credenciais válidas com bcrypt.
-- `src/server.ts` usa CORS sem allowlist, não instala headers de segurança nem rate limiting, e `/health` é somente liveness.
+- Login aceitava comparar senha com texto em `senhaHash`; o seed antigo gravava o literal `hash`. O fallback foi removido, cinco contas legadas foram convertidas para bcrypt preservando as senhas armazenadas, e a prévia posterior encontrou zero contas pendentes.
+- O script `migrate:legacy-passwords` mantém modo de prévia por padrão; aplicação exige opt-in. O seed agora exige `SEED_DEFAULT_PASSWORD` e grava bcrypt.
+- `src/server.ts` agora aplica allowlist CORS configurada por `CORS_ORIGINS` (com origens localhost apenas em desenvolvimento); headers de segurança e rate limiting ainda não foram implementados. `/health` é somente liveness.
 - `package.json` não tem suíte de testes configurada (`npm test` falha por definição). Não há `CHANGELOG.md` no estado observado.
 - O `.gitignore` ignora `.env`; a auditoria/contexto existente afirma que houve segredo versionado anteriormente. O histórico Git e credenciais externas precisam ser auditados/rotacionados operacionalmente; remover um arquivo do estado atual não revoga uma credencial.
 - A trilha de auditoria é consultável, mas o schema não impede alteração/exclusão no banco. Soft delete, verificação SHA-256, RLS, recuperação e operação/monitoramento ainda não estão prontos para sustentar promessas de compliance/SLA.
@@ -53,13 +54,14 @@ Os prazos são faixas para planejamento, não compromissos. Reestimar após inve
 1. Registrar o diagnóstico e os gates de comercialização neste plano.
 2. Remover do login a aceitação da senha em texto puro armazenada no campo `senhaHash`.
 3. Tratar a arquitetura Organizacional multi-tenant como pré-requisito para liberar qualquer piloto com dados de clientes reais.
+4. Fechar CORS por allowlist e permitir configurar a URL da API por ambiente no frontend, sem embutir URL local em builds de staging/produção.
 
 ### Pendências que continuam dentro da Etapa 1
 
-- Auditar o histórico Git e revogar/rotacionar todas as credenciais que já foram expostas; isso requer acesso e ação nos provedores (banco, AWS, JWT e webhooks).
+- Verificação local de 2026-10-13: `.env` está ignorado e não apareceu nas refs/objetos alcançáveis deste checkout. Ainda é necessário revisar clones/forks e verificar/rotacionar as credenciais nos provedores (banco, AWS, JWT e webhooks), pois a auditoria anterior registra exposição.
 - Substituir senhas fracas/de seed por hashes bcrypt reais e fluxo de reset de senha antes de usuários-piloto.
 - Fazer threat model e matriz de permissões para organização assinante, equipe interna e usuários de clientes externos.
-- Definir migração de `Client/Project/Contract` para a fronteira Organization, incluindo organizações com vários clientes e contas que participam em mais de um contrato.
+- Fronteira definida em [ADR-009](../architecture/ADR-009-organizacao-assinante.md): `Organization → Client → Project → Contract`; preparar mapa de propriedade legado e plano de migração antes da implementação.
 - Fechar critérios de piloto e decidir política de configuração por planos/perfis.
 - Adicionar CHANGELOG e sincronizar `PROJECT-CONTEXT.md` após decisão arquitetural aprovada.
 

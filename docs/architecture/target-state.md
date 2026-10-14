@@ -521,6 +521,7 @@ jobs:
 | ADR-006 | Secrets Manager for All Credentials | **Aprovado (Urgente)** |
 | ADR-007 | Soft Delete Pattern for All Entities | Proposto |
 | ADR-008 | Idempotency Keys for Mutating Endpoints | Proposto |
+| ADR-009 | Organização Assinante como Fronteira do Tenant SaaS | Aceito — implementação pendente |
 
 ---
 
