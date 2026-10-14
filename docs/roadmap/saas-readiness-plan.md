@@ -28,7 +28,8 @@ Uma pessoa pode participar de mais de uma organização ou contrato. Acesso exte
 - `Contract` é a unidade de isolamento, mas `contractId` é lido de query/params/body; ausência de tenant faz a extensão Prisma deixar a consulta seguir sem filtro. A extensão não protege automaticamente relações incluídas nem modelos filhos.
 - Login aceitava comparar senha com texto em `senhaHash`; o seed antigo gravava o literal `hash`. O fallback foi removido, cinco contas legadas foram convertidas para bcrypt preservando as senhas armazenadas, e a prévia posterior encontrou zero contas pendentes.
 - O script `migrate:legacy-passwords` mantém modo de prévia por padrão; aplicação exige opt-in. O seed agora exige `SEED_DEFAULT_PASSWORD` e grava bcrypt.
-- `src/server.ts` agora aplica allowlist CORS configurada por `CORS_ORIGINS` (com origens localhost apenas em desenvolvimento); headers de segurança e rate limiting ainda não foram implementados. `/health` é somente liveness.
+- `src/server.ts` aplica allowlist CORS (`CORS_ORIGINS`), Helmet, limite JSON de 1 MB, rate limit global e mais restrito em `/auth`, e confiança configurável de proxy (`TRUST_PROXY_HOPS`). `/health` é liveness sem consumir o rate limit. O armazenamento padrão do rate limit é local à instância e exige store compartilhado antes de escalar horizontalmente.
+- Dashboard, aprovações (listagem), planejamento, auditoria, gestão, GRD e exportação MDR agora validam `ContractMembership` em middleware antes do controller; endpoints por ID de documento/revisão continuam exigindo autorização pelo recurso pai e não substituem RLS.
 - `package.json` não tem suíte de testes configurada (`npm test` falha por definição). Não há `CHANGELOG.md` no estado observado.
 - O `.gitignore` ignora `.env`; a auditoria/contexto existente afirma que houve segredo versionado anteriormente. O histórico Git e credenciais externas precisam ser auditados/rotacionados operacionalmente; remover um arquivo do estado atual não revoga uma credencial.
 - A trilha de auditoria é consultável, mas o schema não impede alteração/exclusão no banco. Soft delete, verificação SHA-256, RLS, recuperação e operação/monitoramento ainda não estão prontos para sustentar promessas de compliance/SLA.
@@ -56,14 +57,30 @@ Os prazos são faixas para planejamento, não compromissos. Reestimar após inve
 3. Tratar a arquitetura Organizacional multi-tenant como pré-requisito para liberar qualquer piloto com dados de clientes reais.
 4. Fechar CORS por allowlist e permitir configurar a URL da API por ambiente no frontend, sem embutir URL local em builds de staging/produção.
 
-### Pendências que continuam dentro da Etapa 1
+### Concluído nesta implementação local da Etapa 1
+
+- Login aceita apenas bcrypt; script de migração de senhas legadas em modo prévia por padrão; seed exige senha fornecida por ambiente e grava hash.
+- CORS por allowlist e URL da API configurável no frontend por ambiente.
+- Helmet com CSP e headers padrão; HSTS somente em produção. Limites de payload JSON, requisições gerais e tentativas em `/auth`; `/health` não usa cota da API.
+- `TRUST_PROXY_HOPS` explícito para a API identificar IPs por trás de proxy sem confiar cegamente em `X-Forwarded-For`.
+- Middleware compartilhado valida membership antes dos controllers das listagens/ações que recebem `contractId` diretamente (dashboard, gestão, planejamento, auditoria, exportação MDR, GRD e listagem de aprovações). Ações por IDs de recursos filhos ainda dependem das verificações de acesso ao recurso pai.
+- ADR-009 define a organização assinante e a migração não assume que `Client` legado equivale a `Organization`.
+- Threat model inicial e gates de piloto registrados em [Threat model da fundação SaaS](../architecture/saas-threat-model.md).
+
+### Gates restantes antes de piloto com dados reais
 
 - Verificação local de 2026-10-13: `.env` está ignorado e não apareceu nas refs/objetos alcançáveis deste checkout. Ainda é necessário revisar clones/forks e verificar/rotacionar as credenciais nos provedores (banco, AWS, JWT e webhooks), pois a auditoria anterior registra exposição.
-- Substituir senhas fracas/de seed por hashes bcrypt reais e fluxo de reset de senha antes de usuários-piloto.
-- Fazer threat model e matriz de permissões para organização assinante, equipe interna e usuários de clientes externos.
-- Fronteira definida em [ADR-009](../architecture/ADR-009-organizacao-assinante.md): `Organization → Client → Project → Contract`; preparar mapa de propriedade legado e plano de migração antes da implementação.
-- Fechar critérios de piloto e decidir política de configuração por planos/perfis.
-- Adicionar CHANGELOG e sincronizar `PROJECT-CONTEXT.md` após decisão arquitetural aprovada.
+- Revisar clones/forks, confirmar validade das credenciais registradas no histórico e rotacionar DB, AWS, JWT e webhook conforme aplicável; essa ação depende de acesso aos provedores.
+- Impor troca de senha fraca/default e implementar fluxo de redefinição antes de convidar usuários reais. Não há provedor de e-mail nem configuração segura de envio registrada neste repositório.
+- Preparar e revisar o mapa de propriedade legado `Client → Organization` com o proprietário dos dados; não iniciar backfill sem reconciliação e rollback ensaiado.
+- Aprovar a matriz de permissões e critérios do piloto com os responsáveis de produto/segurança. O threat model nesta etapa é inicial e não substitui revisão independente.
+- Antes de deploy com várias réplicas, configurar store compartilhado (ex.: Redis) para rate limit; confirmar número de proxies confiáveis e origens reais de staging/produção.
+- Configurar alertas, restore de backup, DLQ/retentativa de worker, CI com suíte de segurança e operação de suporte; pertencem às etapas seguintes e bloqueiam venda.
+- Avaliar e tratar findings do `npm audit`; atualização automática sem major não elimina todos os advisories, e dependências sem correção disponível precisam de substituição ou mitigação documentada.
+
+### Critério de encerramento da Etapa 1
+
+Etapa de fundação no código e documentação concluída; etapa **não significa autorização para piloto nem venda**. O gate permanece fechado até os itens externos acima serem evidenciados, a matriz de acesso ser aprovada e os riscos sem correção receberem decisão explícita. Implementação de `Organization`, PostgreSQL RLS e isolamento entre organizações pertence à Etapa 2.
 
 ## Sequenciamento técnico recomendado
 

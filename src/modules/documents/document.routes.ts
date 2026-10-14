@@ -9,7 +9,7 @@ import {
   exportMDR,
 } from './document.controller';
 import { upload } from '../../middlewares/upload';
-import { verifyToken } from '../../middlewares/auth.middleware';
+import { requireContractMembership, verifyToken } from '../../middlewares/auth.middleware';
 
 const router = Router();
 
@@ -21,7 +21,7 @@ router.patch('/:id/metadata', updateMetadataWebhook);
 
 // ÉPICO 11: Exportação de MDR (Master Document Register)
 // DEVE vir ANTES de /:id para não conflitar com o parâmetro de rota
-router.get('/export/mdr', verifyToken, exportMDR);
+router.get('/export/mdr', verifyToken, requireContractMembership, exportMDR);
 
 // ÉPICO 8: Detalhamento de Documento (Single Source of Truth)
 // Retorna metadados, histórico de revisões, status OCR e relação de Transmittals

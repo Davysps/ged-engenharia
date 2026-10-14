@@ -26,7 +26,7 @@ Atende empresas de engenharia nas disciplinas: Processos, Mecânica, Piping, El�
 
 ## Arquitetura
 
-### Atual (Monorelo Único)
+### Atual (Monorepo Único)
 - **Backend:** Node.js 20+ / Express 5.x / TypeScript strict / Prisma 7.8.0 (PostgreSQL Neon)
 - **Auth:** JWT HS256 (1 dia) + bcrypt
 - **Storage:** AWS S3 (presigned PUT URLs)
@@ -34,8 +34,8 @@ Atende empresas de engenharia nas disciplinas: Processos, Mecânica, Piping, El�
 - **Worker:** Python 3.11+ / PyMuPDF (OCR + GRD ZIP/Capa)
 - **Frontend:** React 18 + Vite + Tailwind v4
 - **Estrutura:** `src/`, `ged-frontend/`, `ged-worker-python/`, `prisma/` no mesmo repo
-- **Isolamento tenant:** Prisma Extension + AsyncLocalStorage (application-level, **não confiável**)
-- **Secrets:** `.env` **committado no git — RISCO CRÍTICO**
+- **Isolamento tenant:** Prisma Extension + AsyncLocalStorage e verificações de membership em rotas selecionadas; ainda sem RLS e sem fronteira Organization
+- **Secrets:** `.env` ignorado no checkout atual; auditoria registra exposição histórica e rotação externa ainda precisa ser confirmada
 
 ### Alvo (Target State)
 - **Split repos:** `ged-api`, `ged-worker-ocr`, `ged-worker-transmittal`, `ged-worker-webhook`, `ged-scheduler`, `ged-frontend`, `ged-infra`, `ged-shared`
@@ -92,13 +92,13 @@ Organization (Client)
 4. **Auditoria Imutável** — `AuditLog` é append-only
 5. **Integridade de Arquivos** — `fileHash` = SHA-256 real, verificado no download
 
-### Bloqueadores Críticos (Devem Ser Corrigidos Antes de Qualquer Feature)
-1. **7 secrets expostos no `.env` committado** (DB, AWS Keys, JWT, Webhook) — rotacionar TODOS imediatamente
-2. **Zero testes automatizados** — `npm test` falha propositalmente
-3. **Tenant ID inseguro** — `contractId` vem do request, não do token
-4. **Worker Python sem DLQ** — mensagens envenenadas travam fila
-5. **Webhook URL aponta para localhost** — `GED_INTERNAL_WEBHOOK_URL` hardcoded
-6. **Sem rate limiting, CORS aberto, sem security headers (helmet)**
+### Bloqueadores antes de piloto/venda
+1. **Possível exposição histórica de credenciais** — confirmar validade e rotação nos provedores e revisar forks/clones.
+2. **Zero testes automatizados configurados** — esta rodada não implementou suíte; habilitar gates CI antes do piloto.
+3. **Tenant SaaS ainda é `Contract`** — `contractId` vem do request, as verificações cobrem rotas selecionadas e não há RLS.
+4. **Worker sem DLQ e webhooks sem HMAC/anti-replay completo** — hardening operacional necessário.
+5. **Rate limiter em memória por processo** — store compartilhado obrigatório antes de múltiplas réplicas.
+6. **Sem fluxo de redefinição de senha, observabilidade, restore demonstrado ou readiness operacional.**
 
 ---
 
@@ -118,22 +118,21 @@ Organization (Client)
 - MDR Export (Excel)
 - Audit Logs (Data Room)
 
-### 🔴 Blockers de Produção
-| ID | Blocker | Severidade |
-|----|---------|------------|
-| SEC-001 | Credenciais expostas no git | Crítico |
-| SEC-002 | Zero testes | Crítico |
-| SEC-003 | Tenant ID controlado pelo cliente | Crítico |
-| SEC-004 | Worker sem DLQ | Crítico |
-| SEC-005 | Webhook URL localhost | Crítico |
-| ARCH-001 | Monolito único sem boundaries de deploy | Alto |
-| DEVOPS-001 | Deploy manual (sem CI/CD) | Alto |
+### 🔴 Gates de Produção ainda abertos
+| ID | Gate | Severidade |
+|----|------|------------|
+| SEC-001 | Confirmar/rotacionar credenciais e revisar histórico/forks externos | Crítico |
+| SEC-002 | Sem suíte de testes/CI; cobertura de isolamento ainda não demonstrada | Crítico |
+| SEC-003 | `Contract` ainda é tenant; sem Organization, RLS e autorização universal | Crítico |
+| SEC-004 | Worker sem DLQ e webhooks sem HMAC/anti-replay completo | Alto |
+| SEC-005 | Rate limiter em memória; sem store compartilhado para múltiplas réplicas | Alto |
+| OPS-001 | Sem restore demonstrado, monitoramento e processo operacional de suporte | Alto |
 
 ### 🟡 Dívida Técnica Alta
 - JWT HS256 24h sem refresh token
-- Sem rate limiting
-- CORS `*`
-- Sem helmet/security headers
+- Rate limiting local por processo (não compartilhado entre réplicas)
+- CORS por allowlist configurável; origens de produção ainda devem ser definidas
+- Helmet/CSP ativos; HSTS apenas em produção
 - Prisma Extension incompleto (`findUnique` + `include` bypassa filtro)
 - Validação de membership duplicada em 8+ services
 - Transmittal webhook sem tenant check
@@ -144,15 +143,17 @@ Organization (Client)
 
 ## Roadmap (Fases 01–14)
 
-### Direção SaaS e etapa de comercialização (atualização 2026-10-13)
+### Direção SaaS e etapa de comercialização (atualização 2026-10-14)
 
 O plano para evoluir do piloto até venda recorrente está em [`roadmap/saas-readiness-plan.md`](roadmap/saas-readiness-plan.md). O desenho atual `Client > Project > Contract` não define a organização assinante do SaaS. Antes de dados reais de clientes, a arquitetura precisa representar `Organization (tenant assinante) > clientes externos > projetos > contratos` e validar acesso de forma server-side e no PostgreSQL.
 
-Correção aplicada nesta rodada: login valida e-mail/senha e aceita apenas hashes bcrypt; o fallback que comparava senha diretamente com `senhaHash` foi removido. As outras pendências de segurança e isolamento listadas na auditoria seguem abertas; esta correção isolada não torna o sistema pronto para piloto ou produção.
+Correção aplicada: login valida e-mail/senha e aceita apenas hashes bcrypt; o fallback que comparava senha diretamente com `senhaHash` foi removido. Esta fundação não torna o sistema pronto para piloto ou produção.
 
 Compatibilidade de credenciais: o seed antigo armazenava senhas como texto, o que explica o `401` após a exigência de bcrypt. Cinco contas legadas foram convertidas para bcrypt preservando suas senhas; uma nova prévia encontrou zero contas pendentes. O comando `migrate:legacy-passwords` opera em prévia por padrão e só grava após opt-in; o seed passou a exigir `SEED_DEFAULT_PASSWORD` e gravar bcrypt.
 
-Também aplicado: CORS por allowlist (`CORS_ORIGINS`, localhost em desenvolvimento) e `VITE_API_URL` configurável no frontend. `.env.example` e `ged-frontend/.env.example` contêm apenas placeholders/valores locais.
+Também aplicado: CORS por allowlist (`CORS_ORIGINS`, localhost em desenvolvimento), `VITE_API_URL`, Helmet/CSP, HSTS apenas em produção, limite JSON de 1 MB e rate limits geral e `/auth`. `/health` não consome a cota geral. O rate limit é local por processo; store compartilhado é obrigatório antes de escalar réplicas.
+
+Autorização: rotas com `contractId` explícito em dashboard, listagem de aprovações, planejamento, auditoria, gestão, GRD e exportação MDR agora passam por `requireContractMembership` antes do controller. Rotas por IDs de recursos filhos continuam precisando validar o contrato do recurso pai; RLS permanece pendente.
 
 Nota de estado: a auditoria de 2026-09-24 registra exposição de `.env`. Em 2026-10-13, `.env` está ignorado e não foi encontrado nas refs/objetos Git alcançáveis deste checkout. Isso não verifica forks, clones antigos ou validade/revogação das credenciais; revisar os provedores continua necessário. A fronteira SaaS foi registrada em [ADR-009](architecture/ADR-009-organizacao-assinante.md): `Organization` assinante contém clientes externos, projetos e contratos; a migração requer mapa de propriedade revisado.
 
@@ -180,15 +181,18 @@ Nota de estado: a auditoria de 2026-09-24 registra exposição de `.env`. Em 202
 
 Objetivo: Corrigir todos os blockers de segurança antes de implementar novas features comerciais.
 
-### Próximos Passos Imediatos (Esta Semana)
-1. **Rotacionar TODAS as credenciais expostas** (Neon DB password, AWS Access Keys, JWT Secret, Webhook Secret)
-2. **Adicionar `.env.example` e remover `.env` do git**
-3. **Configurar CORS restritivo** (origins: prod, staging, localhost)
-4. **Adicionar `helmet` + CSP + HSTS**
-5. **Implementar rate limiting** (`express-rate-limit` — global + stricter em `/auth`)
-6. **Corrigir `GED_INTERNAL_WEBHOOK_URL`** para URL real de produção
-7. **Configurar SQS DLQ** + Redrive Policy + CloudWatch Alarm
-8. **Remover artefatos do repo:** `ged-worker-python/output/`, `teste-upload.html`, `GEMINI.TXT`
+### Fundação aplicada na Etapa 1
+1. Login apenas com bcrypt, migração legada em modo prévia por padrão e seed seguro.
+2. `.env.example`, CORS allowlist, `VITE_API_URL`, Helmet/CSP, HSTS em produção e JSON limitado a 1 MB.
+3. Rate limit geral e mais restrito em `/auth`; `TRUST_PROXY_HOPS` configurável para a topologia real.
+4. Membership centralizada em rotas selecionadas e documentação de arquitetura, riscos e gates.
+
+### Gates antes de piloto/venda
+1. Confirmar e rotacionar credenciais nos provedores; revisar forks, clones e histórico externo.
+2. Implementar redefinição de senha após escolher/configurar provedor de e-mail.
+3. Aprovar matriz de acesso, revisar endpoints de recursos filhos e mapear `Client` legado para `Organization` com o proprietário dos dados.
+4. Implementar Organization + RLS, DLQ e HMAC para workers/webhooks; configurar store compartilhado de rate limit antes de múltiplas réplicas.
+5. Adicionar testes/CI, monitoramento e restore exercitado, além de suporte, privacidade e cobrança antes de venda.
 
 ### Sprint 1 (Fundação Segura)
 - Setup Vitest (backend) + Vitest/RTL (frontend) + Playwright (E2E)
@@ -202,9 +206,7 @@ Objetivo: Corrigir todos os blockers de segurança antes de implementar novas fe
 
 ## Próximo Objetivo
 
-**Corrigir os blockers de segurança (FASE 01) antes de implementar novas features comerciais.**
-
-Não alterar banco, autenticação, APIs, frontend ou infraestrutura além do necessário para o hardening de segurança. Foco exclusivo em: secrets rotation, auth hardening, tenant isolation fix, worker resilience, CI/CD setup, test infrastructure.
+Validar os gates restantes e iniciar a Etapa 2 somente após aprovação do mapa de propriedade legado e do plano de migração. A fundação aplicada não libera piloto com dados reais nem venda.
 
 ---
 

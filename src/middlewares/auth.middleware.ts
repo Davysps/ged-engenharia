@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt, { JwtPayload } from 'jsonwebtoken';
+import { prisma } from '../prisma';
 import { runWithTenant } from '../lib/tenantContext';
 
 // Estendendo o Request do Express para incluir o ID do usuário logado
@@ -80,4 +81,43 @@ export const verifyToken = (req: AuthRequest, res: Response, next: NextFunction)
   } catch (error) {
     res.status(401).json({ error: 'Token inválido ou expirado.' });
   }
+};
+
+/**
+ * Confirma membership no contrato antes de executar handlers que recebem
+ * contractId diretamente. A extensão Prisma já pode ter esse ID no contexto,
+ * mas o filtro composto exige também o userId autenticado.
+ */
+export const requireContractMembership = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): void => {
+  if (!req.userId) {
+    res.status(401).json({ error: 'Usuário não autenticado.' });
+    return;
+  }
+  const userId = req.userId;
+
+  const contractId = extractTenantContractId(req);
+  if (contractId === undefined) {
+    res.status(400).json({ error: 'contractId é obrigatório e deve ser válido.' });
+    return;
+  }
+
+  prisma.contractMembership.findUnique({
+    where: { userId_contractId: { userId, contractId } },
+    select: { role: true },
+  }).then((membership) => {
+    if (!membership) {
+      res.status(403).json({ error: 'Acesso negado: você não é membro deste contrato.' });
+      return;
+    }
+
+    req.contractId = contractId;
+    runWithTenant({ userId, contractId }, next);
+  }).catch((error: unknown) => {
+    console.error('[GED Engenharia] Erro ao validar membership do contrato.', error);
+    res.status(500).json({ error: 'Não foi possível validar o acesso ao contrato.' });
+  });
 };

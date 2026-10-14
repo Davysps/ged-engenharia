@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { verifyToken } from '../../middlewares/auth.middleware';
+import { requireContractMembership, verifyToken } from '../../middlewares/auth.middleware';
 import {
   listWorkPackages,
   createWorkPackage,
@@ -11,6 +11,7 @@ const router = Router();
 
 // Todas as rotas do Planning são protegidas por JWT
 router.use(verifyToken);
+router.use(requireContractMembership);
 
 // ── Épico 7: Módulo de Planejamento e Coordenação (Pacotes de Trabalho) ──
 // Todas as rotas recebem o contractId como query param para isolamento multi-tenant.

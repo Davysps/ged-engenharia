@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { verifyToken } from '../../middlewares/auth.middleware';
+import { requireContractMembership, verifyToken } from '../../middlewares/auth.middleware';
 import { upload } from '../../middlewares/upload';
 import { getPendingApprovals, handleApprovalAction } from './approval.controller';
 
@@ -9,7 +9,7 @@ const router = Router();
 router.use(verifyToken);
 
 // GET /approvals?contractId=X
-router.get('/', getPendingApprovals);
+router.get('/', requireContractMembership, getPendingApprovals);
 
 // ÉPICO 10 / PATCH 10.2: Motor de Aprovação Estrito — ação única que exige um dos
 // status exatos do fluxo. Agora aceita multipart/form-data para anexo do PDF comentado.
