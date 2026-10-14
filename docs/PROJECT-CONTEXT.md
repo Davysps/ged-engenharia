@@ -144,6 +144,14 @@ Organization (Client)
 
 ## Roadmap (Fases 01–14)
 
+### Direção SaaS e etapa de comercialização (atualização 2026-10-13)
+
+O plano para evoluir do piloto até venda recorrente está em [`roadmap/saas-readiness-plan.md`](roadmap/saas-readiness-plan.md). O desenho atual `Client > Project > Contract` não define a organização assinante do SaaS. Antes de dados reais de clientes, a arquitetura precisa representar `Organization (tenant assinante) > clientes externos > projetos > contratos` e validar acesso de forma server-side e no PostgreSQL.
+
+Correção aplicada nesta rodada: login valida e-mail/senha e aceita apenas hashes bcrypt; o fallback que comparava senha diretamente com `senhaHash` foi removido. As outras pendências de segurança e isolamento listadas na auditoria seguem abertas; esta correção isolada não torna o sistema pronto para piloto ou produção.
+
+Nota de estado: a auditoria de 2026-09-24 registra exposição de `.env` no histórico. O arquivo está ignorado pelo `.gitignore` no estado observado em 2026-10-13 e não aparece entre os arquivos atualmente indexados. Isso não comprova que credenciais históricas foram revogadas; a rotação permanece necessária.
+
 | Fase | Nome | Foco | Entregável |
 |------|------|------|------------|
 | **00.5** | Bootstrap Contexto | Documentação | AGENTS.md, PROJECT-CONTEXT.md |

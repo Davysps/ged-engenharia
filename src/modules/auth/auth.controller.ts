@@ -2,10 +2,21 @@ import { Request, Response } from 'express';
 import { prisma } from '../../prisma';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
+import { z } from 'zod';
+
+const loginSchema = z.object({
+  email: z.string().trim().email().max(254),
+  senha: z.string().min(1).max(128),
+});
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, senha } = req.body;
+    const credentials = loginSchema.safeParse(req.body);
+    if (!credentials.success) {
+      res.status(400).json({ error: 'E-mail ou senha em formato inválido.' });
+      return;
+    }
+    const { email, senha } = credentials.data;
 
     const user = await prisma.user.findUnique({ where: { email } });
 
@@ -14,9 +25,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Como o nosso Seed atual salvou a senha como 'hash', vamos prever isso no MVP, 
-    // mas em produção usaremos o bcrypt.compare
-    const isPasswordValid = senha === user.senhaHash || await bcrypt.compare(senha, user.senhaHash);
+    // Senhas precisam estar armazenadas como hashes bcrypt. Nunca aceitar o
+    // valor armazenado como senha em texto puro, nem mesmo durante o MVP.
+    let isPasswordValid = false;
+    try {
+      isPasswordValid = await bcrypt.compare(senha, user.senhaHash);
+    } catch {
+      // Hash legado ou inválido não deve transformar credencial ruim em erro 500.
+    }
 
     if (!isPasswordValid) {
       res.status(401).json({ error: 'Credenciais inválidas.' });
