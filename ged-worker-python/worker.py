@@ -97,11 +97,7 @@ def process_document(document_id: int, revision_id: int, file_path: str) -> bool
 
 def main_loop() -> None:
     if not all([SQS_QUEUE_URL, S3_BUCKET, WEBHOOK_URL, INTERNAL_SECRET]):
-        print(f"DEBUG: SQS_QUEUE_URL={SQS_QUEUE_URL}")
-        print(f"DEBUG: S3_BUCKET={S3_BUCKET}")
-        print(f"DEBUG: WEBHOOK_URL={WEBHOOK_URL}")
-        print(f"DEBUG: INTERNAL_SECRET={INTERNAL_SECRET}")
-        print("[GED-WORKER] ERRO DE AMBIENTE: Verifique as variáveis da AWS e Webhook no .env.")
+        print("[GED-WORKER] ERRO DE AMBIENTE: configure fila SQS, bucket S3, URL do webhook e segredo interno.")
         return
 
     print("[GED-WORKER] Listener SQS ativo via Long Polling (PyMuPDF). A aguardar documentos...")

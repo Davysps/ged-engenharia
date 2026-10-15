@@ -42,6 +42,26 @@ export const uploadDocument = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
+    const [workPackage, discipline] = await Promise.all([
+      workPackageId === null
+        ? null
+        : prisma.workPackage.findFirst({
+            where: { id: workPackageId, contractId },
+            select: { id: true },
+          }),
+      contractDisciplineId === null
+        ? null
+        : prisma.contractDiscipline.findFirst({
+            where: { id: contractDisciplineId, contractId },
+            select: { id: true },
+          }),
+    ]);
+
+    if ((workPackageId !== null && !workPackage) || (contractDisciplineId !== null && !discipline)) {
+      res.status(400).json({ error: 'Pacote ou disciplina não pertence a este contrato.' });
+      return;
+    }
+
     // ── DOCUMENTO "CASCA" (SEM ARQUIVO FÍSICO) ─────────────────────────
     // REGRA DE NEGÓCIO (CRÍTICA): na engenharia real, o Planejador cadastra o
     // Esqueleto/Placeholder do documento no sistema (MDR) ANTES do PDF existir.
@@ -536,13 +556,6 @@ export const updateMetadataWebhook = async (req: Request, res: Response): Promis
   const { id } = req.params;
   const body = req.body ?? {};
 
-  // Proteção rigorosa do Serviço Interno
-  const secret = req.headers['x-internal-secret'];
-  if (secret !== process.env.GED_INTERNAL_SECRET) {
-    res.status(401).json({ error: 'Acesso não autorizado para o serviço interno.' });
-    return;
-  }
-
   // ── NOVO FORMATO (ÉPICO 13): { documentId, revisionId, status, extractedText } ──
   const hasRevisionPayload = typeof body.revisionId === 'number' && !!body.status;
 
@@ -554,6 +567,14 @@ export const updateMetadataWebhook = async (req: Request, res: Response): Promis
 
       const updated = await prisma.$transaction(async (tx) => {
         // 1. Grava o texto extraído na revisão correspondente
+        const existingRevision = await tx.revision.findFirst({
+          where: { id: revisionId, documentId },
+          select: { id: true },
+        });
+        if (!existingRevision) {
+          throw new Error('REVISION_DOCUMENT_MISMATCH');
+        }
+
         const revision = await tx.revision.update({
           where: { id: revisionId },
           data: { extractedText: body.extractedText ?? null },
@@ -572,6 +593,10 @@ export const updateMetadataWebhook = async (req: Request, res: Response): Promis
 
       res.status(200).json(updated);
     } catch (error) {
+      if (error instanceof Error && error.message === 'REVISION_DOCUMENT_MISMATCH') {
+        res.status(404).json({ error: 'Revisão não encontrada para este documento.' });
+        return;
+      }
       console.error(`[GED-API] Falha ao gravar texto extraído via Webhook (Doc ID: ${id}):`, error);
       res.status(500).json({ error: 'Erro interno ao gravar o texto extraído do OCR.' });
     }

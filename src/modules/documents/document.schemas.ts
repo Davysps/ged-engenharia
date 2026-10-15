@@ -82,7 +82,7 @@ export type UploadDocumentInput = z.infer<typeof uploadDocumentSchema>;
 // O Frontend informa apenas nome e tipo do arquivo; o Backend gera a URL
 // PUT autenticada e a fileKey que será usada na etapa de confirmação.
 // ─────────────────────────────────────────────────────────────────────
-export const presignedUrlSchema = z.object({
+const presignedFileSchema = z.object({
   fileName: z
     .string()
     .trim()
@@ -94,6 +94,15 @@ export const presignedUrlSchema = z.object({
     .min(1, 'O tipo do arquivo (MIME) é obrigatório.')
     .max(100, 'O tipo do arquivo (MIME) deve ter no máximo 100 caracteres.'),
 });
+
+export const presignedUrlSchema = z.union([
+  presignedFileSchema.extend({
+    contractId: z.coerce.number().int().positive(),
+  }),
+  presignedFileSchema.extend({
+    documentId: z.coerce.number().int().positive(),
+  }),
+]);
 
 export type PresignedUrlInput = z.infer<typeof presignedUrlSchema>;
 

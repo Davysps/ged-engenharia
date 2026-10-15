@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt, { JwtPayload } from 'jsonwebtoken';
+import type { ContractRole } from '@prisma/client';
 import { prisma } from '../prisma';
 import { runWithTenant } from '../lib/tenantContext';
 
@@ -8,6 +9,7 @@ import { runWithTenant } from '../lib/tenantContext';
 export interface AuthRequest extends Request {
   userId?: number;
   contractId?: number;
+  contractRole?: ContractRole;
 }
 
 /**
@@ -105,6 +107,16 @@ export const requireContractMembership = (
     return;
   }
 
+  authorizeContractMembership(req, res, next, userId, contractId);
+};
+
+const authorizeContractMembership = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+  userId: number,
+  contractId: number
+): void => {
   prisma.contractMembership.findUnique({
     where: { userId_contractId: { userId, contractId } },
     select: { role: true },
@@ -115,9 +127,73 @@ export const requireContractMembership = (
     }
 
     req.contractId = contractId;
+    req.contractRole = membership.role;
     runWithTenant({ userId, contractId }, next);
   }).catch((error: unknown) => {
     console.error('[GED Engenharia] Erro ao validar membership do contrato.', error);
     res.status(500).json({ error: 'Não foi possível validar o acesso ao contrato.' });
   });
+};
+
+/** Resolve o contrato por um documento e valida membership antes do handler. */
+export const requireDocumentMembership = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): void => {
+  if (!req.userId) {
+    res.status(401).json({ error: 'Usuário não autenticado.' });
+    return;
+  }
+
+  const rawDocumentId = req.params.id ?? req.params.documentId ?? req.query.documentId ?? (req.body as any)?.documentId;
+  const documentId = Number(rawDocumentId);
+  if (!Number.isInteger(documentId) || documentId <= 0) {
+    res.status(400).json({ error: 'documentId é obrigatório e deve ser válido.' });
+    return;
+  }
+
+  const userId = req.userId;
+  prisma.document.findFirst({
+    where: {
+      id: documentId,
+      contract: { memberships: { some: { userId } } },
+    },
+    select: { contractId: true },
+  }).then((document) => {
+    if (!document) {
+      res.status(404).json({ error: 'Documento não encontrado.' });
+      return;
+    }
+    authorizeContractMembership(req, res, next, userId, document.contractId);
+  }).catch((error: unknown) => {
+    console.error('[GED Engenharia] Erro ao validar acesso ao documento.', error);
+    res.status(500).json({ error: 'Não foi possível validar o acesso ao documento.' });
+  });
+};
+
+/** Autoriza presign de documento novo por contrato ou upload de revisão por documento. */
+export const requireContractOrDocumentMembership = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): void => {
+  if (extractTenantContractId(req) !== undefined) {
+    requireContractMembership(req, res, next);
+    return;
+  }
+  requireDocumentMembership(req, res, next);
+};
+
+/** Restringe operações de envio de documentos aos papéis que podem criar/revisar. */
+export const requireDocumentWriteRole = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): void => {
+  if (!req.contractRole || !['GESTOR', 'COORDENADOR'].includes(req.contractRole)) {
+    res.status(403).json({ error: 'Acesso negado: apenas Gestores ou Coordenadores podem enviar documentos.' });
+    return;
+  }
+  next();
 };

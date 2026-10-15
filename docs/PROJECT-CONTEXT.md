@@ -153,6 +153,8 @@ Compatibilidade de credenciais: o seed antigo armazenava senhas como texto, o qu
 
 Também aplicado: CORS por allowlist (`CORS_ORIGINS`, localhost em desenvolvimento), `VITE_API_URL`, Helmet/CSP, HSTS apenas em produção, limite JSON de 1 MB e rate limits geral e `/auth`. `/health` não consome a cota geral. O rate limit é local por processo; store compartilhado é obrigatório antes de escalar réplicas.
 
+Etapa 2.1: URLs pré-assinadas exigem membership e papel de escrita no contrato ou documento; detalhes/revisões usam middleware que resolve o contrato pai; documentos recusam disciplina/pacote de outro contrato; exclusão de apontamento requer membership vigente. Webhooks internos exigem segredo configurado e comparação em tempo constante; callback de OCR valida que revisão e documento correspondem. O worker não imprime mais o segredo em logs.
+
 Autorização: rotas com `contractId` explícito em dashboard, listagem de aprovações, planejamento, auditoria, gestão, GRD e exportação MDR agora passam por `requireContractMembership` antes do controller. Rotas por IDs de recursos filhos continuam precisando validar o contrato do recurso pai; RLS permanece pendente.
 
 Nota de estado: a auditoria de 2026-09-24 registra exposição de `.env`. Em 2026-10-13, `.env` está ignorado e não foi encontrado nas refs/objetos Git alcançáveis deste checkout. Isso não verifica forks, clones antigos ou validade/revogação das credenciais; revisar os provedores continua necessário. A fronteira SaaS foi registrada em [ADR-009](architecture/ADR-009-organizacao-assinante.md): `Organization` assinante contém clientes externos, projetos e contratos; a migração requer mapa de propriedade revisado.
@@ -206,7 +208,7 @@ Objetivo: Corrigir todos os blockers de segurança antes de implementar novas fe
 
 ## Próximo Objetivo
 
-Validar os gates restantes e iniciar a Etapa 2 somente após aprovação do mapa de propriedade legado e do plano de migração. A fundação aplicada não libera piloto com dados reais nem venda.
+Concluir a Etapa 2.1 com verificação manual e avançar para Organization/reconciliação (Etapa 2.2) após aprovação do mapa de propriedade legado. A Etapa 2.1 ainda não fornece RLS e não libera piloto com dados reais nem venda.
 
 ---
 

@@ -59,10 +59,15 @@ export const documentService = {
   /**
    * Passo 1 — Solicita uma pre-signed URL de upload (PUT autenticado no S3).
    */
-  async getPresignedUrl(fileName: string, fileType: string): Promise<PresignedUrlResult> {
+  async getPresignedUrl(
+    fileName: string,
+    fileType: string,
+    scope: { contractId: number } | { documentId: number }
+  ): Promise<PresignedUrlResult> {
     const response = await api.post<PresignedUrlResult>('/documents/presigned-url', {
       fileName,
       fileType,
+      ...scope,
     });
     return response.data;
   },
@@ -121,7 +126,11 @@ export const documentService = {
     }
 
     onPhase?.('presign');
-    const { uploadUrl, fileKey } = await this.getPresignedUrl(file.name, getFileType(file));
+    const { uploadUrl, fileKey } = await this.getPresignedUrl(
+      file.name,
+      getFileType(file),
+      { contractId: payload.contractId }
+    );
 
     onPhase?.('upload');
     await this.uploadToS3(file, uploadUrl);
@@ -140,7 +149,11 @@ export const documentService = {
     onPhase?: (phase: UploadPhase) => void
   ): Promise<CreateRevisionResponse> {
     onPhase?.('presign');
-    const { uploadUrl, fileKey } = await this.getPresignedUrl(file.name, getFileType(file));
+    const { uploadUrl, fileKey } = await this.getPresignedUrl(
+      file.name,
+      getFileType(file),
+      { documentId }
+    );
 
     onPhase?.('upload');
     await this.uploadToS3(file, uploadUrl);

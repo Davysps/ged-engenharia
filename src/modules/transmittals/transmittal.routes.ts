@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { TransmittalController } from './transmittal.controller';
 import { requireContractMembership, verifyToken } from '../../middlewares/auth.middleware';
+import { requireInternalWebhookSecret } from '../../middlewares/internalWebhook.middleware';
 
 const router = Router();
 const transmittalController = new TransmittalController();
@@ -11,6 +12,6 @@ router.get('/contracts/:contractId/transmittals', verifyToken, requireContractMe
 // Rota dedicada a alimentar a tabela de GRDs no Frontend
 router.get('/contracts/:contractId/transmittals/approved-revisions', verifyToken, requireContractMembership, transmittalController.getApprovedRevisions);
 
-router.patch('/webhooks/transmittals/:transmittalId/complete', transmittalController.webhookComplete);
+router.patch('/webhooks/transmittals/:transmittalId/complete', requireInternalWebhookSecret, transmittalController.webhookComplete);
 
 export { router as transmittalRoutes };

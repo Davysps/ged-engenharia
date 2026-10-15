@@ -107,7 +107,13 @@ export class TimesheetService {
    */
   static async remove(timeLogId: number, userId: number) {
     const existing = await prisma.timeLog.findFirst({
-      where: { id: timeLogId, userId },
+      where: {
+        id: timeLogId,
+        userId,
+        document: {
+          contract: { memberships: { some: { userId } } },
+        },
+      },
       select: { id: true, userId: true },
     });
 
