@@ -5,7 +5,7 @@ export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
 });
 
-// INTERCEPTOR DE REQUISIÇÃO: Injeta o Token limpo (sem aspas fantasmas)
+// INTERCEPTOR DE REQUISIÇÃO: Injeta o Token limpo e a Organização Ativa (x-organization-id)
 api.interceptors.request.use(
   (config) => {
     let token = localStorage.getItem('@GED:token');
@@ -14,6 +14,11 @@ api.interceptors.request.use(
       // Saneamento de segurança: remove aspas que o localStorage possa adicionar acidentalmente
       token = token.replace(/['"]+/g, '');
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    const activeOrgId = localStorage.getItem('@GED:activeOrganizationId');
+    if (activeOrgId) {
+      config.headers['x-organization-id'] = activeOrgId;
     }
     
     return config;

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { OrganizationProvider } from './contexts/OrganizationContext';
 import { LoginForm } from './features/auth/components/LoginForm';
 import { Dashboard } from './features/contracts/components/Dashboard';
 import { ContractLayout } from './features/contracts/components/ContractLayout';
@@ -96,9 +97,11 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <Router>
-        <AppRoutes />
-      </Router>
+      <OrganizationProvider>
+        <Router>
+          <AppRoutes />
+        </Router>
+      </OrganizationProvider>
     </AuthProvider>
   );
 }
