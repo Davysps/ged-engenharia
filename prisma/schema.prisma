@@ -15,6 +15,13 @@ enum GlobalRole {
   USER // Utilizador comum logado
 }
 
+// ADR-009: Papéis no escopo da Organização Assinante
+enum OrganizationRole {
+  ORG_ADMIN // Administrador geral da empresa assinante
+  ORG_MEMBER // Membro técnico / colaborador
+  ORG_BILLING // Gestor financeiro / faturamento
+}
+
 enum ContractRole {
   GESTOR // Acesso total: cria, aprova e gerencia
   COORDENADOR // Acesso total: cria, aprova e gerencia
@@ -73,14 +80,46 @@ enum DocumentOcrStatus {
 
 // --- MODELS ---
 
+// ADR-009: Organização Assinante (Raiz do Tenant SaaS)
+model Organization {
+  id          Int                      @id @default(autoincrement())
+  nome        String
+  slug        String                   @unique
+  cnpj        String?                  @unique
+  ativo       Boolean                  @default(true)
+  memberships OrganizationMembership[]
+  clients     Client[]
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+}
+
+model OrganizationMembership {
+  id             Int              @id @default(autoincrement())
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId Int
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         Int
+  role           OrganizationRole @default(ORG_MEMBER)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@index([organizationId])
+}
+
 model Client {
-  id        Int        @id @default(autoincrement())
-  nome      String
-  cnpj      String?    @unique
-  contracts Contract[]
-  projects  Project[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id             Int           @id @default(autoincrement())
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId Int?
+  nome           String
+  cnpj           String?       @unique
+  contracts      Contract[]
+  projects       Project[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([organizationId])
 }
 
 // ÉPICO 9: Hierarquia Estrutural — Cliente > Projeto > Contrato
@@ -149,6 +188,9 @@ model User {
   globalRole GlobalRole @default(USER)
   // ÉPICO 10: Usuário externo (Cliente) ou membro interno (Time) do GED Engenharia
   isClient   Boolean    @default(false)
+
+  // ADR-009: Vínculo às organizações assinantes das quais faz parte
+  organizationMemberships OrganizationMembership[]
 
   contracts        ContractMembership[]
   documentsCreated Document[]           @relation("UserCreatedDocuments")

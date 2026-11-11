@@ -13,6 +13,7 @@ import managementRoutes from './modules/management/management.routes';
 import planningRoutes from './modules/planning/planning.routes';
 import timesheetRoutes from './modules/timesheets/timesheet.routes';
 import auditRoutes from './modules/audit/audit.routes';
+import organizationRoutes from './modules/organizations/organization.routes';
 
 dotenv.config();
 
@@ -107,6 +108,9 @@ export function createApp() {
 
   // Épico 12: Trilha de Auditoria (Data Room & Audit Logs)
   app.use('/audit-logs', auditRoutes);
+
+  // ADR-009: Gestão de Organizações Assinantes (Tenant SaaS)
+  app.use('/organizations', organizationRoutes);
 
   return app;
 }
