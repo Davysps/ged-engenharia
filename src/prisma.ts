@@ -60,6 +60,22 @@ export const prisma = new PrismaClient({ adapter }).$extends({
   name: 'tenantIsolation',
   query: {
     async $allOperations({ model, operation, args, query }) {
+      // Compliance B2B / Data Room: A tabela AuditLog é estritamente Append-Only (Imutável)
+      // Nenhuma operação de UPDATE ou DELETE é permitida em registros de auditoria.
+      if (model === 'AuditLog') {
+        const forbiddenAuditOperations = new Set([
+          'update',
+          'updateMany',
+          'updateManyAndReturn',
+          'delete',
+          'deleteMany',
+          'upsert',
+        ]);
+        if (forbiddenAuditOperations.has(operation)) {
+          throw new Error('[Security Compliance] Operações de modificação ou exclusão em AuditLog são estritamente proibidas.');
+        }
+      }
+
       const contractId = getTenantContractId();
       const organizationId = getTenantOrganizationId();
 
