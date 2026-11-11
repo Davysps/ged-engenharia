@@ -18,6 +18,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 export interface TenantContext {
   userId?: number;
   contractId?: number;
+  organizationId?: number;
 }
 
 export const tenantStorage = new AsyncLocalStorage<TenantContext>();
@@ -35,6 +36,11 @@ export function getTenantUserId(): number | undefined {
 /** ID do contrato (tenant) ativo na requisição. */
 export function getTenantContractId(): number | undefined {
   return getTenantContext()?.contractId;
+}
+
+/** ID da organização (tenant corporativo) ativo na requisição. */
+export function getTenantOrganizationId(): number | undefined {
+  return getTenantContext()?.organizationId;
 }
 
 /**

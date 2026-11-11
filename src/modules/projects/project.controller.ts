@@ -108,8 +108,19 @@ export const getProjects = async (req: AuthRequest, res: Response): Promise<void
     }
 
     // ISOLAMENTO MULTI-TENANT: apenas contratos onde o usuário é membro
+    // Se organizationId for fornecido, restringe os clientes pertencentes a essa organização
+    const organizationId = req.organizationId;
+    const whereClause: any = { userId };
+    if (organizationId) {
+      whereClause.contract = {
+        client: {
+          organizationId,
+        },
+      };
+    }
+
     const memberships = await prisma.contractMembership.findMany({
-      where: { userId },
+      where: whereClause,
       include: {
         contract: {
           include: {

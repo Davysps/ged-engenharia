@@ -2,7 +2,7 @@ import 'dotenv/config'; // Garante que o .env é carregado antes de tudo
 import { PrismaClient } from '@prisma/client';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { getTenantContractId } from './lib/tenantContext';
+import { getTenantContractId, getTenantOrganizationId } from './lib/tenantContext';
 
 const connectionString = process.env.DATABASE_URL!;
 
@@ -61,16 +61,34 @@ export const prisma = new PrismaClient({ adapter }).$extends({
   query: {
     async $allOperations({ model, operation, args, query }) {
       const contractId = getTenantContractId();
+      const organizationId = getTenantOrganizationId();
+
+      const safeArgs = (args ?? {}) as Record<string, unknown>;
+
+      // Injeção de isolamento organizacional no modelo Client quando em contexto de organização
+      if (model === 'Client' && organizationId) {
+        if (WHERE_OPERATIONS.has(operation)) {
+          const currentWhere = (safeArgs.where ?? {}) as Record<string, unknown>;
+          safeArgs.where = { ...currentWhere, organizationId };
+        }
+        if (operation === 'create' || operation === 'upsert') {
+          const createData = operation === 'upsert' ? safeArgs.create : safeArgs.data;
+          if (createData && typeof createData === 'object' && !Array.isArray(createData)) {
+            const data = createData as Record<string, unknown>;
+            if (!('organizationId' in data) && !('organization' in data)) {
+              data.organizationId = organizationId;
+            }
+          }
+        }
+      }
 
       // 1. Sem tenant ativo no AsyncLocalStorage (rota pública, webhook interno,
       //    ou rota autenticada sem contractId no request): a query passa exatamente
       //    como antes — o desenvolvedor segue responsável pelo filtro manual.
-      if (!contractId) return query(args);
+      if (!contractId) return query(safeArgs);
 
       // 2. Modelos que não possuem a coluna `contractId` (globais/filhas).
-      if (!model || !TENANT_SCOPED_MODELS.has(model)) return query(args);
-
-      const safeArgs = args as Record<string, unknown>;
+      if (!model || !TENANT_SCOPED_MODELS.has(model)) return query(safeArgs);
 
       // 3. Injeção automática do tenant no `where` — cobre leituras, contagens,
       //    agregações e mutações sem depender de o dev lembrar do filtro.

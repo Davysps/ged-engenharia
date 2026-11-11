@@ -5,11 +5,28 @@ import { prisma } from '../prisma';
 import { runWithTenant } from '../lib/tenantContext';
 
 // Estendendo o Request do Express para incluir o ID do usuário logado
-// e o contractId (tenant) ativo na requisição.
+// e o contractId/organizationId (tenants) ativos na requisição.
 export interface AuthRequest extends Request {
   userId?: number;
   contractId?: number;
   contractRole?: ContractRole;
+  organizationId?: number;
+}
+
+/**
+ * Extrai a organização ativa (organizationId) enviada no header 'x-organization-id', query ou body.
+ */
+function extractTenantOrganizationId(req: Request): number | undefined {
+  const raw =
+    req.headers['x-organization-id'] ??
+    req.query?.organizationId ??
+    req.params?.organizationId ??
+    (req as any).body?.organizationId;
+
+  if (raw === undefined || raw === null || raw === '') return undefined;
+
+  const value = Number(raw);
+  return Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
 /**
@@ -70,11 +87,17 @@ export const verifyToken = (req: AuthRequest, res: Response, next: NextFunction)
         req.contractId = contractId;
       }
 
+      const organizationId = extractTenantOrganizationId(req);
+      if (organizationId !== undefined) {
+        req.organizationId = organizationId;
+      }
+
       // 5. ETAPA 2.2 — Isolamento Multi-Tenant: envolve toda a continuação da
       // requisição no AsyncLocalStorage. A extensão do Prisma lê esse contexto
-      // e injeta o `contractId` (tenant) automaticamente em todas as queries.
-      const ctx: { userId?: number; contractId?: number } = { userId };
+      // e injeta o `contractId` e `organizationId` automaticamente nas queries.
+      const ctx: { userId?: number; contractId?: number; organizationId?: number } = { userId };
       if (contractId !== undefined) ctx.contractId = contractId;
+      if (organizationId !== undefined) ctx.organizationId = organizationId;
 
       runWithTenant(ctx, next);
     } else {
@@ -172,7 +195,45 @@ export const requireDocumentMembership = (
   });
 };
 
-/** Autoriza presign de documento novo por contrato ou upload de revisão por documento. */
+/**
+ * Valida se o usuário autenticado pertence à organização ativa (organizationId).
+ */
+export const requireOrganizationMembership = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  if (!req.userId) {
+    res.status(401).json({ error: 'Usuário não autenticado.' });
+    return;
+  }
+
+  const organizationId = req.organizationId;
+  if (!organizationId) {
+    res.status(400).json({ error: 'Cabeçalho x-organization-id é obrigatório para esta operação.' });
+    return;
+  }
+
+  try {
+    const membership = await prisma.organizationMembership.findFirst({
+      where: {
+        userId: req.userId,
+        organizationId,
+      },
+    });
+
+    if (!membership) {
+      res.status(403).json({ error: 'Acesso negado: você não pertence a esta organização.' });
+      return;
+    }
+
+    next();
+  } catch (error) {
+    console.error('[Auth] Erro ao validar membership na organização:', error);
+    res.status(500).json({ error: 'Erro ao validar acesso à organização.' });
+  }
+};
+
 export const requireContractOrDocumentMembership = (
   req: AuthRequest,
   res: Response,
