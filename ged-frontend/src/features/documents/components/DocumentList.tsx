@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useEffect } from 'react';
+﻿import { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   useReactTable,
@@ -17,18 +17,52 @@ import { EmitirGrdModal } from '../../transmittals/components/EmitirGrdModal';
 import {
   FileText, UploadCloud, Eye, History, Send,
   Search, FilterX, Package, Download, MoreHorizontal, FilePenLine,
+  Clock, CheckCircle2, XCircle, Tag, AlertCircle,
 } from 'lucide-react';
 import { UploadForm } from './UploadForm';
-import { DocumentViewer } from './DocumentViewer';
+import { DocumentViewer, type ViewerDocument, type ViewerRevision } from './DocumentViewer';
 import { RevisionUploadForm } from './RevisionUploadForm';
 import { RevisionHistoryModal } from './RevisionHistoryModal';
 import { documentService } from '../services/document.service';
 import type { DocumentListItem } from '../types/document.types';
+import type { RevisionStatus } from '../../../types/prisma-types';
 
-// ÉPICO 8: Removido o campo legado `disciplina` — depende de contractDiscipline e workPackage
+// Ã‰PICO 8: Removido o campo legado `disciplina` â€” depende de contractDiscipline e workPackage
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Colunas da tabela (definidas uma única vez; semântica pura, sem closures list)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// SemÃ¢ntica de status de revisÃ£o (paleta tÃ©cnica de engenharia)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+const STATUS_CFG: Record<RevisionStatus, { label: string; icon: React.ReactNode; badge: string }> = {
+  EM_ELABORACAO: {
+    label: 'Em ElaboraÃ§Ã£o',
+    icon: <Clock className="w-3 h-3" />,
+    badge: 'bg-sky-50 text-sky-700 border border-sky-200',
+  },
+  EM_REVISAO: {
+    label: 'Em RevisÃ£o',
+    icon: <AlertCircle className="w-3 h-3" />,
+    badge: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+  },
+  APROVADO: {
+    label: 'Aprovado',
+    icon: <CheckCircle2 className="w-3 h-3" />,
+    badge: 'bg-emerald-50 text-emerald-700 border border-emerald-300',
+  },
+  REJEITADO: {
+    label: 'Reprovado',
+    icon: <XCircle className="w-3 h-3" />,
+    badge: 'bg-rose-50 text-rose-700 border border-rose-200',
+  },
+  OBSOLETO: {
+    label: 'Obsoleto',
+    icon: <Tag className="w-3 h-3" />,
+    badge: 'bg-slate-100 text-slate-500 border border-slate-200',
+  },
+};
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Colunas da tabela (definidas uma Ãºnica vez; semÃ¢ntica pura, sem closures list)
 const columnHelper = createColumnHelper<DocumentListItem>();
 
 export function DocumentList() {
@@ -36,25 +70,25 @@ export function DocumentList() {
   const contractId = Number(contract?.id ?? 0);
   const { canCreateDocument, canUploadRevision, canEmitTransmittal } = usePermissions();
 
-  // ÉPICO 8: Busca Avançada (Busca e Filtros Refinados) — fonte da verdade dos filtros
+  // Ã‰PICO 8: Busca AvanÃ§ada (Busca e Filtros Refinados) â€” fonte da verdade dos filtros
   const [busca, setBusca] = useState('');
   const [disciplinaId, setDisciplinaId] = useState('');
   const [pacoteId, setPacoteId] = useState('');
   const [debouncedBusca, setDebouncedBusca] = useState('');
 
-  // Seleção múltipla de linhas (bulk actions)
+  // SeleÃ§Ã£o mÃºltipla de linhas (bulk actions)
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  // ETAPA 2.6.5: emissão de GRD a partir do Acervo Técnico
+  // ETAPA 2.6.5: emissÃ£o de GRD a partir do Acervo TÃ©cnico
   const [isEmitirGrdOpen, setIsEmitirGrdOpen] = useState(false);
-  // Sessão da GRD: incrementa a cada abertura para remontar o modal limpo
+  // SessÃ£o da GRD: incrementa a cada abertura para remontar o modal limpo
   const [grdSessionKey, setGrdSessionKey] = useState(0);
 
   // Hooks auxiliares do contrato (multi-tenant)
   const { workPackages, fetchWorkPackages } = usePlanning(contractId);
   const { disciplines, fetchDisciplines } = useDisciplines(contractId);
 
-  // React Query: busca/cache/sincronização do acervo
+  // React Query: busca/cache/sincronizaÃ§Ã£o do acervo
   const filters = useMemo(
     () => ({ busca: debouncedBusca, disciplinaId, pacoteId }),
     [debouncedBusca, disciplinaId, pacoteId]
@@ -66,18 +100,22 @@ export function DocumentList() {
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [selectedFileUrl, setSelectedFileUrl] = useState<string | null>(null);
   const [selectedFileName, setSelectedFileName] = useState('');
+  // Dados ricos para o dock lateral do viewer (Etapa 1)
+  const [viewerDocument, setViewerDocument] = useState<ViewerDocument | undefined>(undefined);
+  const [viewerRevision, setViewerRevision] = useState<ViewerRevision | undefined>(undefined);
+  const [viewerAllRevisions, setViewerAllRevisions] = useState<ViewerRevision[]>([]);
 
   const [isRevModalOpen, setIsRevModalOpen] = useState(false);
   const [revDocId, setRevDocId] = useState<number | null>(null);
   const [revDocCodigo, setRevDocCodigo] = useState('');
 
-  // ÉPICO 8: Acesso Rápido ao Histórico (Modal/Popover de Versões)
+  // Ã‰PICO 8: Acesso RÃ¡pido ao HistÃ³rico (Modal/Popover de VersÃµes)
   const [historyDoc, setHistoryDoc] = useState<DocumentListItem | null>(null);
 
-  // ÉPICO 11: Exportação de MDR
+  // Ã‰PICO 11: ExportaÃ§Ã£o de MDR
   const [isExporting, setIsExporting] = useState(false);
 
-  // Menu dropdown de ações por linha
+  // Menu dropdown de aÃ§Ãµes por linha
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -117,7 +155,7 @@ export function DocumentList() {
 
   const hasActiveFilters = busca.trim() !== '' || disciplinaId !== '' || pacoteId !== '';
 
-  // ÉPICO 11: Exportação de MDR
+  // Ã‰PICO 11: ExportaÃ§Ã£o de MDR
   const handleExportMDR = async () => {
     if (!contractId) return;
     try {
@@ -140,9 +178,32 @@ export function DocumentList() {
     }
   };
 
-  const handleViewDocument = (url: string, nome: string) => {
+  const handleViewDocument = (url: string, nome: string, doc?: DocumentListItem, rev?: DocumentListItem['revisions'][0]) => {
     setSelectedFileUrl(url);
     setSelectedFileName(nome);
+    if (doc) {
+      setViewerDocument({
+        id: doc.id,
+        codigoDocumento: doc.codigoDocumento,
+        titulo: doc.titulo,
+        disciplina: doc.contractDiscipline?.nome,
+        workPackage: doc.workPackage?.nome,
+      });
+      setViewerAllRevisions(doc.revisions.map((r) => ({
+        id: r.id,
+        versionLabel: r.versionLabel,
+        filePath: r.filePath,
+        createdAt: r.createdAt,
+      })));
+    }
+    if (rev) {
+      setViewerRevision({
+        id: rev.id,
+        versionLabel: rev.versionLabel,
+        filePath: rev.filePath,
+        createdAt: rev.createdAt,
+      });
+    }
     setIsViewerOpen(true);
     setOpenMenuId(null);
   };
@@ -154,7 +215,7 @@ export function DocumentList() {
     setOpenMenuId(null);
   };
 
-  // ── Definição das colunas ────────────────────────────────────────────────
+  // â”€â”€ DefiniÃ§Ã£o das colunas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const columns = useMemo(() => [
     columnHelper.display({
       id: 'select',
@@ -167,7 +228,7 @@ export function DocumentList() {
           }}
           onChange={table.getToggleAllPageRowsSelectedHandler()}
           className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-          title="Selecionar todas desta página"
+          title="Selecionar todas desta pÃ¡gina"
         />
       ),
       cell: ({ row }) => (
@@ -182,7 +243,7 @@ export function DocumentList() {
       enableSorting: false,
     }),
     columnHelper.accessor('codigoDocumento', {
-      header: () => <span>Código do Documento</span>,
+      header: () => <span>CÃ³digo do Documento</span>,
       cell: ({ row, getValue }) => (
         <Link
           to={`/contracts/${contractId}/documents/${row.original.id}`}
@@ -194,12 +255,12 @@ export function DocumentList() {
       ),
     }),
     columnHelper.accessor('titulo', {
-      header: () => <span>Título</span>,
+      header: () => <span>TÃ­tulo</span>,
       cell: ({ row, getValue }) => (
         <Link
           to={`/contracts/${contractId}/documents/${row.original.id}`}
           className="text-slate-600 hover:text-blue-600 hover:underline truncate transition-colors"
-          title={`${getValue()} — Abrir detalhamento`}
+          title={`${getValue()} â€” Abrir detalhamento`}
         >
           {getValue()}
         </Link>
@@ -214,7 +275,7 @@ export function DocumentList() {
             {getValue() as string}
           </span>
         ) : (
-          <span className="text-[11px] text-slate-400 italic">Não vinculado</span>
+          <span className="text-[11px] text-slate-400 italic">NÃ£o vinculado</span>
         ),
     }),
     columnHelper.accessor('workPackage.nome', {
@@ -227,7 +288,7 @@ export function DocumentList() {
             {getValue() as string}
           </span>
         ) : (
-          <span className="text-[11px] text-slate-400 italic">—</span>
+          <span className="text-[11px] text-slate-400 italic">â€”</span>
         ),
     }),
     columnHelper.accessor('revisions', {
@@ -248,9 +309,37 @@ export function DocumentList() {
         );
       },
     }),
+    // ETAPA 1: Coluna de status semÃ¢ntico (paleta tÃ©cnica de engenharia)
+    columnHelper.display({
+      id: 'status',
+      header: () => <span>Status</span>,
+      cell: ({ row }) => {
+        const revisions = row.original.revisions;
+        const currentRev = revisions[revisions.length - 1];
+        const rawStatus = (currentRev as (typeof currentRev & { status?: RevisionStatus }) | undefined)?.status;
+        if (!rawStatus) {
+          return currentRev ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded font-semibold bg-sky-50 text-sky-700 border border-sky-200 whitespace-nowrap">
+              <Clock className="w-3 h-3" />
+              Em ElaboraÃ§Ã£o
+            </span>
+          ) : (
+            <span className="text-[11px] text-slate-400 italic">â€”</span>
+          );
+        }
+        const cfg = STATUS_CFG[rawStatus];
+        if (!cfg) return null;
+        return (
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded font-semibold whitespace-nowrap ${cfg.badge}`}>
+            {cfg.icon}
+            {cfg.label}
+          </span>
+        );
+      },
+    }),
     columnHelper.display({
       id: 'actions',
-      header: () => <span className="text-right block w-full">Ações</span>,
+      header: () => <span className="text-right block w-full">AÃ§Ãµes</span>,
       cell: ({ row }) => (
         <div
           className="relative flex justify-end"
@@ -259,7 +348,7 @@ export function DocumentList() {
           <button
             onClick={() => setOpenMenuId(openMenuId === row.original.id ? null : row.original.id)}
             className="p-1.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-            title="Mais ações"
+            title="Mais aÃ§Ãµes"
           >
             <MoreHorizontal className="w-4.5 h-4.5" />
           </button>
@@ -270,10 +359,15 @@ export function DocumentList() {
                 icon={Eye}
                 label="Visualizar Documento"
                 onClick={() => {
-const rev = row.original.revisions[row.original.revisions.length - 1];
-                    if (rev) {
-                      handleViewDocument(rev.filePath, `${row.original.codigoDocumento} - ${rev.versionLabel}`);
-                    }
+                  const rev = row.original.revisions[row.original.revisions.length - 1];
+                  if (rev) {
+                    handleViewDocument(
+                      rev.filePath,
+                      `${row.original.codigoDocumento} - ${rev.versionLabel}`,
+                      row.original,
+                      rev,
+                    );
+                  }
                 }}
               />
               <RowAction
@@ -286,7 +380,7 @@ const rev = row.original.revisions[row.original.revisions.length - 1];
               />
               <RowAction
                 icon={History}
-                label="Histórico de Versões"
+                label="HistÃ³rico de VersÃµes"
                 onClick={() => {
                   setHistoryDoc(row.original);
                   setOpenMenuId(null);
@@ -329,9 +423,9 @@ const rev = row.original.revisions[row.original.revisions.length - 1];
           <div>
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
               <FileText className="w-5 h-5 text-blue-600" />
-              Acervo Técnico
+              Acervo TÃ©cnico
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">Gerencie plantas, diagramas e revisões.</p>
+            <p className="text-xs text-slate-500 mt-0.5">Gerencie plantas, diagramas e revisÃµes.</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -350,7 +444,7 @@ const rev = row.original.revisions[row.original.revisions.length - 1];
           </div>
         </div>
 
-        {/* Toolbar de Busca Avançada */}
+        {/* Toolbar de Busca AvanÃ§ada */}
         <div className="px-4 py-3 border-b border-slate-200 bg-white">
           <div className="flex flex-col lg:flex-row gap-2.5">
             <div className="flex-1 relative">
@@ -359,7 +453,7 @@ const rev = row.original.revisions[row.original.revisions.length - 1];
                 type="text"
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar por código, título ou conteúdo do PDF..."
+                placeholder="Buscar por cÃ³digo, tÃ­tulo ou conteÃºdo do PDF..."
                 className="w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-blue-600 outline-none text-sm"
               />
               {isFetching && (
@@ -420,7 +514,7 @@ const rev = row.original.revisions[row.original.revisions.length - 1];
           </div>
         </div>
 
-        {/* Barra de Ações em Lote (bulk actions) */}
+        {/* Barra de AÃ§Ãµes em Lote (bulk actions) */}
         {selectedRows.length > 0 && (
           <div className="px-4 py-2 bg-blue-50/70 border-b border-blue-100 flex items-center justify-between gap-3 flex-wrap">
             <span className="text-xs font-medium text-blue-800">
@@ -444,7 +538,7 @@ const rev = row.original.revisions[row.original.revisions.length - 1];
                 onClick={() => table.resetRowSelection()}
                 className="text-[11px] font-medium text-blue-700 hover:text-blue-900 hover:underline"
               >
-                Limpar seleção
+                Limpar seleÃ§Ã£o
               </button>
             </div>
           </div>
@@ -469,15 +563,27 @@ const rev = row.original.revisions[row.original.revisions.length - 1];
               {isLoading && documents.length === 0 ? (
                 <tr>
                   <td colSpan={columns.length} className="px-3 py-8 text-center text-slate-500 animate-pulse">
-                    Carregando acervo técnico...
+                    Carregando acervo tÃ©cnico...
                   </td>
                 </tr>
               ) : documents.length === 0 ? (
                 <tr>
-                  <td colSpan={columns.length} className="px-3 py-8 text-center text-slate-500 text-sm">
-                    {hasActiveFilters
-                      ? 'Nenhum documento encontrado para os filtros aplicados.'
-                      : 'Nenhum documento encontrado neste contrato.'}
+                  <td colSpan={columns.length} className="px-6 py-14 text-center">
+                    <div className="flex flex-col items-center gap-3 text-slate-400">
+                      <div className="w-14 h-14 rounded-xl bg-slate-100 flex items-center justify-center">
+                        <FileText className="w-7 h-7 text-slate-300" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-600">
+                          {hasActiveFilters ? 'Nenhum resultado encontrado' : 'Acervo técnico vazio'}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
+                          {hasActiveFilters
+                            ? 'Nenhum documento corresponde aos filtros aplicados. Tente ajustar ou limpar os critérios de busca.'
+                            : 'Este contrato ainda não possui documentos cadastrados. Clique em "Novo Documento (R0)" para iniciar o acervo.'}
+                        </p>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -507,9 +613,21 @@ const rev = row.original.revisions[row.original.revisions.length - 1];
 
       <DocumentViewer
         isOpen={isViewerOpen}
-        onClose={() => setIsViewerOpen(false)}
+        onClose={() => {
+          setIsViewerOpen(false);
+          setViewerDocument(undefined);
+          setViewerRevision(undefined);
+          setViewerAllRevisions([]);
+        }}
         fileUrl={selectedFileUrl}
         fileName={selectedFileName}
+        document={viewerDocument}
+        currentRevision={viewerRevision}
+        allRevisions={viewerAllRevisions}
+        onSelectRevision={(rev) => {
+          setSelectedFileUrl(rev.filePath);
+          setViewerRevision(rev);
+        }}
       />
 
       <RevisionUploadForm
@@ -563,3 +681,4 @@ function RowAction({ icon: Icon, label, onClick, accent }: RowActionProps) {
     </button>
   );
 }
+

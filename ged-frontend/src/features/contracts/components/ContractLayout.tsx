@@ -101,9 +101,9 @@ const ContractLayoutInner: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-100 font-sans">
-      {/* ── Top Navigation Bar (ÉPICO 8) ─────────────────────────────── */}
-      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-gray-200 shadow-sm">
+    <div className="min-h-screen bg-slate-100 font-sans">
+      {/* ── Top Navigation Bar (ETAPA 1: Refinamento Enterprise) ──────── */}
+      <header className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm">
         <div className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-4 h-16">
             {/* Identidade da Marca (ÉPICO 8: Refinamento Visual) */}
@@ -176,7 +176,7 @@ const ContractLayoutInner: React.FC = () => {
       </header>
 
       {/* ── Área de Conteúdo (onde as páginas filhas são injetadas) ──── */}
-      <main className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <Outlet />
       </main>
     </div>
