@@ -1,4 +1,4 @@
-﻿import { useMemo, useState, useRef, useEffect } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   useReactTable,
@@ -27,20 +27,20 @@ import { documentService } from '../services/document.service';
 import type { DocumentListItem } from '../types/document.types';
 import type { RevisionStatus } from '../../../types/prisma-types';
 
-// Ã‰PICO 8: Removido o campo legado `disciplina` â€” depende de contractDiscipline e workPackage
+// ÉPICO 8: Removido o campo legado `disciplina` — depende de contractDiscipline e workPackage
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// SemÃ¢ntica de status de revisÃ£o (paleta tÃ©cnica de engenharia)
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
+// Semântica de status de revisão (paleta técnica de engenharia)
+// ─────────────────────────────────────────────────────────────────────────────
 
 const STATUS_CFG: Record<RevisionStatus, { label: string; icon: React.ReactNode; badge: string }> = {
   EM_ELABORACAO: {
-    label: 'Em ElaboraÃ§Ã£o',
+    label: 'Em Elaboração',
     icon: <Clock className="w-3 h-3" />,
     badge: 'bg-sky-50 text-sky-700 border border-sky-200',
   },
   EM_REVISAO: {
-    label: 'Em RevisÃ£o',
+    label: 'Em Revisão',
     icon: <AlertCircle className="w-3 h-3" />,
     badge: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
   },
@@ -61,8 +61,8 @@ const STATUS_CFG: Record<RevisionStatus, { label: string; icon: React.ReactNode;
   },
 };
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Colunas da tabela (definidas uma Ãºnica vez; semÃ¢ntica pura, sem closures list)
+// ─────────────────────────────────────────────────────────────────────────────
+// Colunas da tabela (definidas uma única vez; semântica pura, sem closures list)
 const columnHelper = createColumnHelper<DocumentListItem>();
 
 export function DocumentList() {
@@ -70,25 +70,25 @@ export function DocumentList() {
   const contractId = Number(contract?.id ?? 0);
   const { canCreateDocument, canUploadRevision, canEmitTransmittal } = usePermissions();
 
-  // Ã‰PICO 8: Busca AvanÃ§ada (Busca e Filtros Refinados) â€” fonte da verdade dos filtros
+  // ÉPICO 8: Busca Avançada (Busca e Filtros Refinados) — fonte da verdade dos filtros
   const [busca, setBusca] = useState('');
   const [disciplinaId, setDisciplinaId] = useState('');
   const [pacoteId, setPacoteId] = useState('');
   const [debouncedBusca, setDebouncedBusca] = useState('');
 
-  // SeleÃ§Ã£o mÃºltipla de linhas (bulk actions)
+  // Seleção múltipla de linhas (bulk actions)
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  // ETAPA 2.6.5: emissÃ£o de GRD a partir do Acervo TÃ©cnico
+  // ETAPA 2.6.5: emissão de GRD a partir do Acervo Técnico
   const [isEmitirGrdOpen, setIsEmitirGrdOpen] = useState(false);
-  // SessÃ£o da GRD: incrementa a cada abertura para remontar o modal limpo
+  // Sessão da GRD: incrementa a cada abertura para remontar o modal limpo
   const [grdSessionKey, setGrdSessionKey] = useState(0);
 
   // Hooks auxiliares do contrato (multi-tenant)
   const { workPackages, fetchWorkPackages } = usePlanning(contractId);
   const { disciplines, fetchDisciplines } = useDisciplines(contractId);
 
-  // React Query: busca/cache/sincronizaÃ§Ã£o do acervo
+  // React Query: busca/cache/sincronização do acervo
   const filters = useMemo(
     () => ({ busca: debouncedBusca, disciplinaId, pacoteId }),
     [debouncedBusca, disciplinaId, pacoteId]
@@ -109,13 +109,13 @@ export function DocumentList() {
   const [revDocId, setRevDocId] = useState<number | null>(null);
   const [revDocCodigo, setRevDocCodigo] = useState('');
 
-  // Ã‰PICO 8: Acesso RÃ¡pido ao HistÃ³rico (Modal/Popover de VersÃµes)
+  // ÉPICO 8: Acesso Rápido ao Histórico (Modal/Popover de Versões)
   const [historyDoc, setHistoryDoc] = useState<DocumentListItem | null>(null);
 
-  // Ã‰PICO 11: ExportaÃ§Ã£o de MDR
+  // ÉPICO 11: Exportação de MDR
   const [isExporting, setIsExporting] = useState(false);
 
-  // Menu dropdown de aÃ§Ãµes por linha
+  // Menu dropdown de ações por linha
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -155,7 +155,7 @@ export function DocumentList() {
 
   const hasActiveFilters = busca.trim() !== '' || disciplinaId !== '' || pacoteId !== '';
 
-  // Ã‰PICO 11: ExportaÃ§Ã£o de MDR
+  // ÉPICO 11: Exportação de MDR
   const handleExportMDR = async () => {
     if (!contractId) return;
     try {
@@ -215,7 +215,7 @@ export function DocumentList() {
     setOpenMenuId(null);
   };
 
-  // â”€â”€ DefiniÃ§Ã£o das colunas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Definição das colunas ────────────────────────────────────────────────
   const columns = useMemo(() => [
     columnHelper.display({
       id: 'select',
@@ -228,7 +228,7 @@ export function DocumentList() {
           }}
           onChange={table.getToggleAllPageRowsSelectedHandler()}
           className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-          title="Selecionar todas desta pÃ¡gina"
+          title="Selecionar todas desta página"
         />
       ),
       cell: ({ row }) => (
@@ -243,7 +243,7 @@ export function DocumentList() {
       enableSorting: false,
     }),
     columnHelper.accessor('codigoDocumento', {
-      header: () => <span>CÃ³digo do Documento</span>,
+      header: () => <span>Código do Documento</span>,
       cell: ({ row, getValue }) => (
         <Link
           to={`/contracts/${contractId}/documents/${row.original.id}`}
@@ -255,12 +255,12 @@ export function DocumentList() {
       ),
     }),
     columnHelper.accessor('titulo', {
-      header: () => <span>TÃ­tulo</span>,
+      header: () => <span>Título</span>,
       cell: ({ row, getValue }) => (
         <Link
           to={`/contracts/${contractId}/documents/${row.original.id}`}
           className="text-slate-600 hover:text-blue-600 hover:underline truncate transition-colors"
-          title={`${getValue()} â€” Abrir detalhamento`}
+          title={`${getValue()} — Abrir detalhamento`}
         >
           {getValue()}
         </Link>
@@ -275,7 +275,7 @@ export function DocumentList() {
             {getValue() as string}
           </span>
         ) : (
-          <span className="text-[11px] text-slate-400 italic">NÃ£o vinculado</span>
+          <span className="text-[11px] text-slate-400 italic">Não vinculado</span>
         ),
     }),
     columnHelper.accessor('workPackage.nome', {
@@ -288,7 +288,7 @@ export function DocumentList() {
             {getValue() as string}
           </span>
         ) : (
-          <span className="text-[11px] text-slate-400 italic">â€”</span>
+          <span className="text-[11px] text-slate-400 italic">—</span>
         ),
     }),
     columnHelper.accessor('revisions', {
@@ -309,7 +309,7 @@ export function DocumentList() {
         );
       },
     }),
-    // ETAPA 1: Coluna de status semÃ¢ntico (paleta tÃ©cnica de engenharia)
+    // ETAPA 1: Coluna de status semântico (paleta técnica de engenharia)
     columnHelper.display({
       id: 'status',
       header: () => <span>Status</span>,
@@ -321,10 +321,10 @@ export function DocumentList() {
           return currentRev ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded font-semibold bg-sky-50 text-sky-700 border border-sky-200 whitespace-nowrap">
               <Clock className="w-3 h-3" />
-              Em ElaboraÃ§Ã£o
+              Em Elaboração
             </span>
           ) : (
-            <span className="text-[11px] text-slate-400 italic">â€”</span>
+            <span className="text-[11px] text-slate-400 italic">—</span>
           );
         }
         const cfg = STATUS_CFG[rawStatus];
@@ -339,7 +339,7 @@ export function DocumentList() {
     }),
     columnHelper.display({
       id: 'actions',
-      header: () => <span className="text-right block w-full">AÃ§Ãµes</span>,
+      header: () => <span className="text-right block w-full">Ações</span>,
       cell: ({ row }) => (
         <div
           className="relative flex justify-end"
@@ -348,7 +348,7 @@ export function DocumentList() {
           <button
             onClick={() => setOpenMenuId(openMenuId === row.original.id ? null : row.original.id)}
             className="p-1.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-            title="Mais aÃ§Ãµes"
+            title="Mais ações"
           >
             <MoreHorizontal className="w-4.5 h-4.5" />
           </button>
@@ -380,7 +380,7 @@ export function DocumentList() {
               />
               <RowAction
                 icon={History}
-                label="HistÃ³rico de VersÃµes"
+                label="Histórico de Versões"
                 onClick={() => {
                   setHistoryDoc(row.original);
                   setOpenMenuId(null);
@@ -423,9 +423,9 @@ export function DocumentList() {
           <div>
             <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
               <FileText className="w-5 h-5 text-blue-600" />
-              Acervo TÃ©cnico
+              Acervo Técnico
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">Gerencie plantas, diagramas e revisÃµes.</p>
+            <p className="text-xs text-slate-500 mt-0.5">Gerencie plantas, diagramas e revisões.</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -444,7 +444,7 @@ export function DocumentList() {
           </div>
         </div>
 
-        {/* Toolbar de Busca AvanÃ§ada */}
+        {/* Toolbar de Busca Avançada */}
         <div className="px-4 py-3 border-b border-slate-200 bg-white">
           <div className="flex flex-col lg:flex-row gap-2.5">
             <div className="flex-1 relative">
@@ -453,7 +453,7 @@ export function DocumentList() {
                 type="text"
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar por cÃ³digo, tÃ­tulo ou conteÃºdo do PDF..."
+                placeholder="Buscar por código, título ou conteúdo do PDF..."
                 className="w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-blue-600 outline-none text-sm"
               />
               {isFetching && (
@@ -514,7 +514,7 @@ export function DocumentList() {
           </div>
         </div>
 
-        {/* Barra de AÃ§Ãµes em Lote (bulk actions) */}
+        {/* Barra de Ações em Lote (bulk actions) */}
         {selectedRows.length > 0 && (
           <div className="px-4 py-2 bg-blue-50/70 border-b border-blue-100 flex items-center justify-between gap-3 flex-wrap">
             <span className="text-xs font-medium text-blue-800">
@@ -538,7 +538,7 @@ export function DocumentList() {
                 onClick={() => table.resetRowSelection()}
                 className="text-[11px] font-medium text-blue-700 hover:text-blue-900 hover:underline"
               >
-                Limpar seleÃ§Ã£o
+                Limpar seleção
               </button>
             </div>
           </div>
@@ -563,7 +563,7 @@ export function DocumentList() {
               {isLoading && documents.length === 0 ? (
                 <tr>
                   <td colSpan={columns.length} className="px-3 py-8 text-center text-slate-500 animate-pulse">
-                    Carregando acervo tÃ©cnico...
+                    Carregando acervo técnico...
                   </td>
                 </tr>
               ) : documents.length === 0 ? (

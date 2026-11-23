@@ -90,7 +90,7 @@ export const TransmittalDashboard: React.FC = () => {
         revisionIds: selectedRevisionIds
       });
       
-      alert('GRD registada! Aguardando o processamento do servidor.');
+      alert('GRD registrada! Aguardando o processamento do servidor.');
       setAssunto(''); setMensagem(''); setDestinatario(''); setProposito('PARA_CONHECIMENTO');
       setSelectedRevisionIds([]); 
       setActiveTab('HISTORICO');

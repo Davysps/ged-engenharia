@@ -127,7 +127,7 @@ function EmitirGrdModalInner({ contractId, documents, onClose, onSuccess }: Emit
         proposito,
         revisionIds: selectedRevisionIds,
       });
-      alert('GRD registada com sucesso! Aguardando o processamento do servidor.');
+      alert('GRD registrada com sucesso! Aguardando o processamento do servidor.');
       onSuccess();
       onClose();
     } catch (error) {

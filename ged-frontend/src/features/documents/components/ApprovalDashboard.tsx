@@ -113,7 +113,7 @@ export function ApprovalDashboard() {
     );
   }
 
-  if (isLoading) return <div className="p-6 text-gray-500 animate-pulse">A procurar pendências no acervo técnico...</div>;
+  if (isLoading) return <div className="p-6 text-gray-500 animate-pulse">Buscando pendências no acervo técnico...</div>;
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -145,7 +145,7 @@ export function ApprovalDashboard() {
           <div className="text-center py-12">
             <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900">Tudo em dia!</h3>
-            <p className="text-gray-500">Não existem documentos a aguardar a sua revisão técnica neste momento.</p>
+            <p className="text-gray-500">Não existem documentos aguardando a sua revisão técnica neste momento.</p>
           </div>
         ) : (
           <div className="grid gap-4">

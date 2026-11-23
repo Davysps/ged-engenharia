@@ -94,7 +94,7 @@ export const AuditLogList: FC = () => {
 
       {logs.length === 0 ? (
         <div className="text-center py-12 text-gray-500 text-sm">
-          Nenhum evento de auditoria registado neste contrato.
+          Nenhum evento de auditoria registrado neste contrato.
         </div>
       ) : (
         <div className="overflow-x-auto border border-gray-200 rounded-lg">
@@ -152,7 +152,7 @@ export const AuditLogList: FC = () => {
       )}
 
       <p className="text-xs text-gray-400 font-mono">
-        {logs.length} evento(s) registado(s)
+        {logs.length} evento(s) registrado(s)
       </p>
     </div>
   );
